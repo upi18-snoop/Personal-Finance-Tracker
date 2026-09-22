@@ -343,7 +343,7 @@ across the document (dependency graph and coverage matrix reference them directl
 ### Phase 7 — Charts
 
 - [ ] 7. Chart.js integration for category analysis
-  - [ ] 7.1 Integrate Chart.js and initialize chart canvases
+  - [x] 7.1 Integrate Chart.js and initialize chart canvases
     - **Objective:** Set up `charts.js` to own all Chart.js instances and initialize the expense and income chart canvases once.
     - **Requirements covered:** 6.1, 15.6
     - **Files:** `js/charts.js`, `index.html`, `css/styles.css`

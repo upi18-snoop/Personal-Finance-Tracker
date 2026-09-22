@@ -542,3 +542,45 @@ button:hover {
   border-bottom: none;
   padding: var(--space-xs) 0;
 }
+
+/* ==========================================================================
+   Chart containers (task 7.1) — Req 6.1, 15.6
+   ========================================================================== */
+
+/* Constrain the chart area so the doughnut renders at a readable size on any
+   screen width. position: relative is required by Chart.js responsive mode. */
+.chart-container {
+  position: relative;
+  max-width: 32rem;
+  margin-inline: auto;
+}
+
+/* Give each canvas a fixed height so Chart.js has a stable bounding box.
+   max-width: 100% keeps it within its container on narrow viewports. */
+.chart-container canvas {
+  height: 300px;
+  max-width: 100%;
+}
+
+/* The accessible description paragraph is present in the DOM for screen
+   readers (aria-describedby) but must not be visible to sighted users.
+   Uses the standard visually-hidden technique (Req 15.6). */
+.chart-description {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Empty state inside a chart container: centered, muted, readable. */
+.chart-container .empty-state {
+  text-align: center;
+  padding: var(--space-lg) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}

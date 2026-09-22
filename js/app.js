@@ -426,6 +426,16 @@ function wireFilterControls() {
  * ------------------------------------------------------------------------ */
 
 /**
+ * Currency formatter callback passed to chart update functions so the
+ * accessible text descriptions show properly formatted amounts (Req 9).
+ * @param {number} amount
+ * @returns {string}
+ */
+function formatMoney(amount) {
+  return utils.formatCurrency(amount);
+}
+
+/**
  * Re-render the month-scoped reporting views for the current Selected_Month
  * (reporting scope): the Monthly_Summary and the category charts. This is the
  * single place the reporting scope (`state.selectedMonth`) is pushed into the
@@ -433,9 +443,7 @@ function wireFilterControls() {
  * via renderAll) and a month change (onSelectedMonthChange) share one path.
  *
  * It deliberately does NOT touch the Transaction_List — that belongs to the
- * independent filter scope (Req 4.12 / 5.9). reports.js and charts.js are still
- * stubs in this phase; calling them is a safe no-op and becomes live rendering
- * once tasks 5.3/5.4 and 7.x land, with no change needed here.
+ * independent filter scope (Req 4.12 / 5.9).
  * @returns {void}
  */
 function renderReports() {
@@ -443,19 +451,17 @@ function renderReports() {
   // "YYYY-MM" month key.
   reports.renderMonthlySummary(state.selectedMonth);
 
-  // Category charts for the same reporting scope (Req 6.x / 7.x). Wired live in
-  // Phase 7; no-op stubs until then.
+  // Category charts for the same reporting scope (Req 6.x / 7.x).
+  // Pass the formatMoney callback so chart descriptions show formatted amounts.
+  const monthlyTransactions = transactions.getTransactionsByMonth(state.selectedMonth);
+
   charts.updateExpenseChart(
-    transactions.categoryTotals(
-      transactions.getTransactionsByMonth(state.selectedMonth),
-      "expense"
-    )
+    transactions.categoryTotals(monthlyTransactions, "expense"),
+    formatMoney
   );
   charts.updateIncomeChart(
-    transactions.categoryTotals(
-      transactions.getTransactionsByMonth(state.selectedMonth),
-      "income"
-    )
+    transactions.categoryTotals(monthlyTransactions, "income"),
+    formatMoney
   );
 }
 
@@ -663,6 +669,11 @@ function bootstrap() {
   // Filter/search controls for the Transaction_List (task 6.3, Req 4.1, 4.9).
   // Wired before renderAll so the category filter is populated on first paint.
   wireFilterControls();
+
+  // Initialise the Chart.js canvases once (task 7.1, Req 6.1, 15.6). Called
+  // after the DOM is ready and before renderAll so the first renderReports()
+  // call finds live chart instances to update.
+  charts.initCharts();
 
   // Initial paint of every current view for the persisted state: the Dashboard
   // (totals, count, Selected_Month, recent transactions — task 4.1,
