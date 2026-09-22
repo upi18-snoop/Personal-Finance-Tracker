@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Personal Finance Tracker — record income and expenses, track your balance, and analyze spending by category. All data stays in your browser.">
+  <title>Personal Finance Tracker</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <!--
+    Chart.js loaded from CDN (Req 14.4). This request carries no financial data;
+    it only fetches the charting library. Charts are wired in Phase 7.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <!-- App entry point (ES module). No build step required (Req 16.1). -->
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <!-- App title / global header -->
+  <header class="app-header">
+    <h1 class="app-title">Personal Finance Tracker</h1>
+  </header>
+
+  <main class="app-main" id="app-main">
+    <!-- Balance summary cards: Total_Balance, Total_Income, Total_Expense, count -->
+    <section class="section balance-section" id="balance-section" aria-labelledby="balance-heading">
+      <h2 class="section-heading" id="balance-heading">Overview</h2>
+      <div class="balance-cards" id="balance-cards">
+        <article class="balance-card" id="card-total-balance">
+          <h3 class="balance-card__label">Total Balance</h3>
+          <p class="balance-card__value" id="total-balance-value" data-role="total-balance"></p>
+        </article>
+        <article class="balance-card" id="card-total-income">
+          <h3 class="balance-card__label">Total Income</h3>
+          <p class="balance-card__value" id="total-income-value" data-role="total-income"></p>
+        </article>
+        <article class="balance-card" id="card-total-expense">
+          <h3 class="balance-card__label">Total Expense</h3>
+          <p class="balance-card__value" id="total-expense-value" data-role="total-expense"></p>
+        </article>
+        <article class="balance-card" id="card-transaction-count">
+          <h3 class="balance-card__label">Transactions</h3>
+          <p class="balance-card__value" id="transaction-count-value" data-role="transaction-count"></p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Recent transactions (Dashboard): most recent transactions, newest→oldest -->
+    <section class="section recent-transactions-section" id="recent-transactions-section" aria-labelledby="recent-transactions-heading">
+      <h2 class="section-heading" id="recent-transactions-heading">Recent Transactions</h2>
+      <ul class="transaction-list recent-transactions-list" id="recent-transactions-list"></ul>
+      <p class="empty-state" id="recent-transactions-empty" hidden></p>
+    </section>
+
+    <!-- Add transaction form: type, item name, amount, category, date -->
+    <section class="section add-transaction-section" id="add-transaction-section" aria-labelledby="add-transaction-heading">
+      <h2 class="section-heading" id="add-transaction-heading">Add Transaction</h2>
+      <form class="transaction-form" id="transaction-form" novalidate>
+        <div class="form-field">
+          <label for="transaction-type">Type</label>
+          <select id="transaction-type" name="type" aria-describedby="transaction-type-error">
+            <option value="expense">Expense</option>
+            <option value="income">Income</option>
+          </select>
+          <span class="field-error" id="transaction-type-error" data-field-error="type" role="alert" aria-live="polite"></span>
+        </div>
+        <div class="form-field">
+          <label for="transaction-item-name">Item name</label>
+          <input type="text" id="transaction-item-name" name="itemName" autocomplete="off" aria-describedby="transaction-item-name-error">
+          <span class="field-error" id="transaction-item-name-error" data-field-error="itemName" role="alert" aria-live="polite"></span>
+        </div>
+        <div class="form-field">
+          <label for="transaction-amount">Amount</label>
+          <input type="number" id="transaction-amount" name="amount" min="0" step="any" inputmode="decimal" aria-describedby="transaction-amount-error">
+          <span class="field-error" id="transaction-amount-error" data-field-error="amount" role="alert" aria-live="polite"></span>
+        </div>
+        <div class="form-field">
+          <label for="transaction-category">Category</label>
+          <select id="transaction-category" name="category" aria-describedby="transaction-category-error"></select>
+          <span class="field-error" id="transaction-category-error" data-field-error="category" role="alert" aria-live="polite"></span>
+        </div>
+        <div class="form-field">
+          <label for="transaction-date">Date</label>
+          <input type="date" id="transaction-date" name="date" aria-describedby="transaction-date-error">
+          <span class="field-error" id="transaction-date-error" data-field-error="date" role="alert" aria-live="polite"></span>
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="add-transaction-button">Add transaction</button>
+        </div>
+        <!-- Form-level status message (e.g. success confirmation). -->
+        <p class="form-error" id="transaction-form-error" role="alert" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <!-- Monthly selector: Selected_Month (reporting scope) -->
+    <section class="section month-selector-section" id="month-selector-section" aria-labelledby="month-selector-heading">
+      <h2 class="section-heading" id="month-selector-heading">Selected Month</h2>
+      <div class="form-field">
+        <label for="selected-month">Month</label>
+        <input type="month" id="selected-month" name="selectedMonth">
+      </div>
+      <p class="selected-month-label" id="selected-month-label" data-role="selected-month"></p>
+    </section>
+
+    <!-- Monthly summary: monthly income/expense/net/count + category breakdowns -->
+    <section class="section monthly-summary-section" id="monthly-summary-section" aria-labelledby="monthly-summary-heading">
+      <h2 class="section-heading" id="monthly-summary-heading">Monthly Summary</h2>
+      <div class="monthly-summary" id="monthly-summary">
+        <p class="monthly-summary__income" id="monthly-income-value" data-role="monthly-income"></p>
+        <p class="monthly-summary__expense" id="monthly-expense-value" data-role="monthly-expense"></p>
+        <p class="monthly-summary__net" id="monthly-net-value" data-role="monthly-net"></p>
+        <p class="monthly-summary__count" id="monthly-count-value" data-role="monthly-count"></p>
+      </div>
+      <div class="category-breakdown" id="expense-category-breakdown" aria-label="Expense by category">
+        <h3 class="category-breakdown__heading">Expense by category</h3>
+        <ul class="category-breakdown__list" id="expense-category-list"></ul>
+      </div>
+      <div class="category-breakdown" id="income-category-breakdown" aria-label="Income by category">
+        <h3 class="category-breakdown__heading">Income by category</h3>
+        <ul class="category-breakdown__list" id="income-category-list"></ul>
+      </div>
+    </section>
+
+    <!-- Charts: expense-by-category and income-by-category canvases -->
+    <section class="section charts-section" id="charts-section" aria-labelledby="charts-heading">
+      <h2 class="section-heading" id="charts-heading">Charts</h2>
+      <div class="chart-container" id="expense-chart-container">
+        <h3 class="chart-container__heading">Expenses by category</h3>
+        <canvas id="expense-chart" role="img" aria-label="Expenses by category chart"></canvas>
+        <p class="chart-description" id="expense-chart-description" data-role="expense-chart-description"></p>
+        <p class="empty-state" id="expense-chart-empty" hidden></p>
+      </div>
+      <div class="chart-container" id="income-chart-container">
+        <h3 class="chart-container__heading">Income by category</h3>
+        <canvas id="income-chart" role="img" aria-label="Income by category chart"></canvas>
+        <p class="chart-description" id="income-chart-description" data-role="income-chart-description"></p>
+        <p class="empty-state" id="income-chart-empty" hidden></p>
+      </div>
+    </section>
+
+    <!-- Transaction list with filter/search controls -->
+    <section class="section transaction-list-section" id="transaction-list-section" aria-labelledby="transaction-list-heading">
+      <h2 class="section-heading" id="transaction-list-heading">Transactions</h2>
+      <form class="filter-controls" id="filter-controls" aria-label="Filter transactions">
+        <div class="form-field">
+          <label for="filter-search">Search</label>
+          <input type="search" id="filter-search" name="searchTerm" autocomplete="off">
+        </div>
+        <div class="form-field">
+          <label for="filter-type">Type</label>
+          <select id="filter-type" name="type">
+            <option value="all">All</option>
+            <option value="income">Income</option>
+            <option value="expense">Expense</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="filter-category">Category</label>
+          <select id="filter-category" name="category"></select>
+        </div>
+        <div class="form-field">
+          <label for="filter-month">Month</label>
+          <input type="month" id="filter-month" name="month">
+        </div>
+        <div class="form-actions">
+          <button type="button" id="clear-filters-button" class="btn-secondary">Clear filters</button>
+        </div>
+      </form>
+      <ul class="transaction-list" id="transaction-list"></ul>
+      <p class="empty-state" id="transaction-list-empty" hidden></p>
+    </section>
+
+    <!-- Category management -->
+    <section class="section category-management-section" id="category-management-section" aria-labelledby="category-management-heading">
+      <h2 class="section-heading" id="category-management-heading">Manage Categories</h2>
+      <form class="category-form" id="category-form" novalidate>
+        <div class="form-field">
+          <label for="category-name">Category name</label>
+          <input type="text" id="category-name" name="name" autocomplete="off">
+        </div>
+        <div class="form-field">
+          <label for="category-type">Type</label>
+          <select id="category-type" name="type">
+            <option value="expense">Expense</option>
+            <option value="income">Income</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="add-category-button">Add category</button>
+        </div>
+        <p class="form-error" id="category-form-error" role="alert" aria-live="polite"></p>
+      </form>
+      <ul class="category-list" id="category-list"></ul>
+    </section>
+  </main>
+
+  <!-- Privacy statement (Req 14.3) -->
+  <footer class="app-footer" id="app-footer">
+    <section class="privacy-section" id="privacy-section" aria-labelledby="privacy-heading">
+      <h2 class="section-heading" id="privacy-heading">Privacy</h2>
+      <p class="privacy-statement" id="privacy-statement">
+        Your financial data is stored only in this browser using local storage.
+        It is never sent to any external server.
+      </p>
+    </section>
+  </footer>
+</body>
+</html>

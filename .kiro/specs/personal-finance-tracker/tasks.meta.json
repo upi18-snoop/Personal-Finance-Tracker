@@ -1,0 +1,294 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Create the semantic HTML shell and static structure": [
+      {
+        "executionId": "1c3a3fec-cd01-4982-8a9b-56448fcaf269",
+        "chatSessionId": "sess_cd46244c-3763-4603-b531-a38ed09abba5",
+        "timestamp": 1790060166552
+      },
+      {
+        "executionId": "1c3a3fec-cd01-4982-8a9b-56448fcaf269",
+        "chatSessionId": "sess_cd46244c-3763-4603-b531-a38ed09abba5",
+        "timestamp": 1790060383030
+      }
+    ],
+    "1.2 Create the mobile-first CSS foundation": [
+      {
+        "executionId": "bbb1d4ee-ea42-40d5-a7a2-1aa9bdf7a9cb",
+        "chatSessionId": "sess_efd76abc-e715-4e57-be40-18e6ec202f7f",
+        "timestamp": 1790061019100
+      },
+      {
+        "executionId": "bbb1d4ee-ea42-40d5-a7a2-1aa9bdf7a9cb",
+        "chatSessionId": "sess_efd76abc-e715-4e57-be40-18e6ec202f7f",
+        "timestamp": 1790061319000
+      }
+    ],
+    "1.3 Scaffold the ES module structure and app entry point": [
+      {
+        "executionId": "a93b199c-2745-4cd1-88eb-b1448cafd40b",
+        "chatSessionId": "sess_4d943629-2c96-494e-9495-ef9f4721432e",
+        "timestamp": 1790061404929
+      },
+      {
+        "executionId": "a93b199c-2745-4cd1-88eb-b1448cafd40b",
+        "chatSessionId": "sess_4d943629-2c96-494e-9495-ef9f4721432e",
+        "timestamp": 1790061781641
+      }
+    ],
+    "1. Project foundation: HTML shell, CSS foundation, JS module scaffolding": [
+      {
+        "executionId": "a93b199c-2745-4cd1-88eb-b1448cafd40b",
+        "chatSessionId": "sess_4d943629-2c96-494e-9495-ef9f4721432e",
+        "timestamp": 1790061781818
+      }
+    ],
+    "2.1 Define the data model and utility leaf helpers": [
+      {
+        "executionId": "93c58b40-6505-4e1d-b1ce-43fb7b7bc6d1",
+        "chatSessionId": "sess_2b3d0064-bd63-48f9-923e-511b0de7e550",
+        "timestamp": 1790062002752
+      },
+      {
+        "executionId": "93c58b40-6505-4e1d-b1ce-43fb7b7bc6d1",
+        "chatSessionId": "sess_2b3d0064-bd63-48f9-923e-511b0de7e550",
+        "timestamp": 1790062242154
+      }
+    ],
+    "2.3 Implement the storage layer, schema, and localStorage read/write": [
+      {
+        "executionId": "5bd68b9b-12ce-438f-978f-f5b317e849a5",
+        "chatSessionId": "sess_0e17191c-db87-4100-bc7f-56060ed29620",
+        "timestamp": 1790062281225
+      },
+      {
+        "executionId": "5bd68b9b-12ce-438f-978f-f5b317e849a5",
+        "chatSessionId": "sess_0e17191c-db87-4100-bc7f-56060ed29620",
+        "timestamp": 1790062517981
+      }
+    ],
+    "2.4 Seed default categories in the schema": [
+      {
+        "executionId": "bce7ad76-d3d8-4eef-89ca-2aef6e33daca",
+        "chatSessionId": "sess_bc3ee1fa-cb35-4f6d-96fd-01319ebbdee0",
+        "timestamp": 1790062552091
+      },
+      {
+        "executionId": "bce7ad76-d3d8-4eef-89ca-2aef6e33daca",
+        "chatSessionId": "sess_bc3ee1fa-cb35-4f6d-96fd-01319ebbdee0",
+        "timestamp": 1790062689194
+      }
+    ],
+    "2.5 Implement schema validation and corrupted/missing recovery": [
+      {
+        "executionId": "f63bb1d2-cadc-411f-b42b-5e6ff898eb0c",
+        "chatSessionId": "sess_5bb9c56f-4983-4492-ac4a-a426a9e3e543",
+        "timestamp": 1790062730720
+      },
+      {
+        "executionId": "f63bb1d2-cadc-411f-b42b-5e6ff898eb0c",
+        "chatSessionId": "sess_5bb9c56f-4983-4492-ac4a-a426a9e3e543",
+        "timestamp": 1790062972059
+      }
+    ],
+    "2.7 Implement the StorageProvider abstraction (LocalStorageProvider) and document GoogleSheetsProvider placeholder": [
+      {
+        "executionId": "0ae92b21-44fd-4412-9f66-f5da2227fc2f",
+        "chatSessionId": "sess_9226f1e9-c22e-48c7-99d0-19e0b22655c9",
+        "timestamp": 1790063106299
+      },
+      {
+        "executionId": "0ae92b21-44fd-4412-9f66-f5da2227fc2f",
+        "chatSessionId": "sess_9226f1e9-c22e-48c7-99d0-19e0b22655c9",
+        "timestamp": 1790063423146
+      }
+    ],
+    "2. Data model and storage layer with recovery and provider abstraction": [
+      {
+        "executionId": "0ae92b21-44fd-4412-9f66-f5da2227fc2f",
+        "chatSessionId": "sess_9226f1e9-c22e-48c7-99d0-19e0b22655c9",
+        "timestamp": 1790063423389
+      }
+    ],
+    "3.1 Implement transaction creation, validation, and money math": [
+      {
+        "executionId": "8471dd0f-52b9-4dd7-9141-79d415359908",
+        "chatSessionId": "sess_38361db9-dfcb-46e4-9f39-02f6c8ceba66",
+        "timestamp": 1790063481440
+      },
+      {
+        "executionId": "8471dd0f-52b9-4dd7-9141-79d415359908",
+        "chatSessionId": "sess_38361db9-dfcb-46e4-9f39-02f6c8ceba66",
+        "timestamp": 1790063657541
+      }
+    ],
+    "3.3 Build the add-transaction form UI, validation display, and form reset": [
+      {
+        "executionId": "f16eb203-6f37-48e2-9a42-70016e289eae",
+        "chatSessionId": "sess_558fbcd0-6953-4600-bc4e-4df047ee994b",
+        "timestamp": 1790063751658
+      },
+      {
+        "executionId": "f16eb203-6f37-48e2-9a42-70016e289eae",
+        "chatSessionId": "sess_558fbcd0-6953-4600-bc4e-4df047ee994b",
+        "timestamp": 1790063989928
+      }
+    ],
+    "3.4 Render the transaction list with income/expense visual distinction": [
+      {
+        "executionId": "a45290eb-4c62-4935-afe5-07fcd72e1a72",
+        "chatSessionId": "sess_ad83b9fd-18b5-496f-b153-0cb63ff6faa1",
+        "timestamp": 1790064042715
+      },
+      {
+        "executionId": "a45290eb-4c62-4935-afe5-07fcd72e1a72",
+        "chatSessionId": "sess_ad83b9fd-18b5-496f-b153-0cb63ff6faa1",
+        "timestamp": 1790064777751
+      }
+    ],
+    "3.5 Implement delete transaction with confirmation": [
+      {
+        "executionId": "68116839-1225-48e5-91ad-29b6c9ac7018",
+        "chatSessionId": "sess_1e9d4d76-004c-46c1-bc36-b44979583936",
+        "timestamp": 1790064959274
+      },
+      {
+        "executionId": "68116839-1225-48e5-91ad-29b6c9ac7018",
+        "chatSessionId": "sess_1e9d4d76-004c-46c1-bc36-b44979583936",
+        "timestamp": 1790065294174
+      }
+    ],
+    "3. Transaction business logic and list rendering": [
+      {
+        "executionId": "68116839-1225-48e5-91ad-29b6c9ac7018",
+        "chatSessionId": "sess_1e9d4d76-004c-46c1-bc36-b44979583936",
+        "timestamp": 1790065294355
+      }
+    ],
+    "4.1 Render dashboard totals, selected month, count, and recent transactions": [
+      {
+        "executionId": "30dfff1f-9a96-4ce7-8a1d-e3891c5d35c7",
+        "chatSessionId": "sess_44b3cd08-38e9-4cb2-b146-2bfc3fa12958",
+        "timestamp": 1790065353700
+      },
+      {
+        "executionId": "30dfff1f-9a96-4ce7-8a1d-e3891c5d35c7",
+        "chatSessionId": "sess_44b3cd08-38e9-4cb2-b146-2bfc3fa12958",
+        "timestamp": 1790065588724
+      }
+    ],
+    "4.2 Wire dashboard reactivity to add/delete state changes": [
+      {
+        "executionId": "fe1098b0-d2fe-47f3-bf22-0af64b89f3ad",
+        "chatSessionId": "sess_60131a6f-756a-49dd-9849-0f36b40fe53c",
+        "timestamp": 1790065625909
+      },
+      {
+        "executionId": "fe1098b0-d2fe-47f3-bf22-0af64b89f3ad",
+        "chatSessionId": "sess_60131a6f-756a-49dd-9849-0f36b40fe53c",
+        "timestamp": 1790065861518
+      }
+    ],
+    "4. Dashboard rendering and reactivity": [
+      {
+        "executionId": "fe1098b0-d2fe-47f3-bf22-0af64b89f3ad",
+        "chatSessionId": "sess_60131a6f-756a-49dd-9849-0f36b40fe53c",
+        "timestamp": 1790065861741
+      }
+    ],
+    "5.1 Implement month-scoped reads and category totals in business logic": [
+      {
+        "executionId": "7e70453a-1806-4bae-90e7-58cea6d6c8d2",
+        "chatSessionId": "sess_07d8c12d-ec49-482c-b7cb-b6714db30afe",
+        "timestamp": 1790066028338
+      },
+      {
+        "executionId": "7e70453a-1806-4bae-90e7-58cea6d6c8d2",
+        "chatSessionId": "sess_07d8c12d-ec49-482c-b7cb-b6714db30afe",
+        "timestamp": 1790066404505
+      }
+    ],
+    "5.2 Build the month selector and wire reporting-scope changes": [
+      {
+        "executionId": "8c4cd093-c463-49fa-aee5-80fd6fdde63f",
+        "chatSessionId": "sess_7473d236-3ab0-4d71-96d4-b44357881ea8",
+        "timestamp": 1790066448630
+      }
+    ],
+    "5.3 Render monthly totals (income, expense, net, count)": [
+      {
+        "executionId": "bb281f1e-f113-45b8-beb2-3c6de6ab1089",
+        "chatSessionId": "sess_8bba1075-caac-415b-a52c-e7603c602f97",
+        "timestamp": 1790067870646
+      },
+      {
+        "executionId": "bb281f1e-f113-45b8-beb2-3c6de6ab1089",
+        "chatSessionId": "sess_8bba1075-caac-415b-a52c-e7603c602f97",
+        "timestamp": 1790068116300
+      }
+    ],
+    "5.4 Render expense and income category breakdowns for the month": [
+      {
+        "executionId": "802bd67c-f6b0-4c1d-bc78-20716d2b0875",
+        "chatSessionId": "sess_ad09e457-9aab-4b55-b43f-d9e27ad85572",
+        "timestamp": 1790068579498
+      },
+      {
+        "executionId": "802bd67c-f6b0-4c1d-bc78-20716d2b0875",
+        "chatSessionId": "sess_ad09e457-9aab-4b55-b43f-d9e27ad85572",
+        "timestamp": 1790068767675
+      }
+    ],
+    "6.1 Implement the pure filterTransactions view function": [
+      {
+        "executionId": "72a287bc-c58c-4ba4-a8ed-88322375d3d8",
+        "chatSessionId": "sess_e7bce859-020a-44f9-8f89-cd0c9fe95a95",
+        "timestamp": 1790068826920
+      },
+      {
+        "executionId": "72a287bc-c58c-4ba4-a8ed-88322375d3d8",
+        "chatSessionId": "sess_e7bce859-020a-44f9-8f89-cd0c9fe95a95",
+        "timestamp": 1790068915935
+      }
+    ],
+    "6.3 Build filter/search controls and apply filters to the list only": [
+      {
+        "executionId": "04999b97-c8d6-46f1-a966-18186b31f993",
+        "chatSessionId": "sess_e3dc9dbe-606c-4192-883a-d7c993d55816",
+        "timestamp": 1790069008986
+      },
+      {
+        "executionId": "04999b97-c8d6-46f1-a966-18186b31f993",
+        "chatSessionId": "sess_e3dc9dbe-606c-4192-883a-d7c993d55816",
+        "timestamp": 1790069434154
+      }
+    ],
+    "6.4 Implement Clear Filters and the filtered empty state": [
+      {
+        "executionId": "9f5f74fe-9ced-4cbc-9841-4df948262d64",
+        "chatSessionId": "sess_a88adbdf-6105-41f0-a27f-933b3ee433f2",
+        "timestamp": 1790069581371
+      },
+      {
+        "executionId": "9f5f74fe-9ced-4cbc-9841-4df948262d64",
+        "chatSessionId": "sess_a88adbdf-6105-41f0-a27f-933b3ee433f2",
+        "timestamp": 1790069854455
+      }
+    ],
+    "6. Read-only search and filtering over the transaction list": [
+      {
+        "executionId": "9f5f74fe-9ced-4cbc-9841-4df948262d64",
+        "chatSessionId": "sess_a88adbdf-6105-41f0-a27f-933b3ee433f2",
+        "timestamp": 1790069854621
+      }
+    ],
+    "7.1 Integrate Chart.js and initialize chart canvases": [
+      {
+        "executionId": "c6d137cf-76e8-46af-be27-6f905e203ced",
+        "chatSessionId": "sess_de27f4bc-041d-4606-9b98-58c8cd25bb7e",
+        "timestamp": 1790069922638
+      }
+    ]
+  }
+}
