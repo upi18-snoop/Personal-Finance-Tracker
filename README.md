@@ -1410,6 +1410,17 @@ between the camelCase JavaScript model and the snake_case PostgreSQL columns:
 
 ### RLS status
 
-> **RLS is NOT enabled yet. Task 16.2 will enable RLS and create the `user_id = auth.uid()`
-> policies on all three tables. Do not expose these tables to public/anon access before
-> Task 16.2 is complete.**
+RLS is enabled on all three tables (`supabase/rls.sql`, Task 16.2). The `transactions_owner_policy`,
+`categories_owner_policy`, and `settings_owner_policy` policies enforce `user_id = auth.uid()` for
+all operations. Unauthenticated (anon) requests are rejected by default-deny.
+
+### Task 16.4 — Supabase Database Provider (implemented, not yet wired)
+
+`js/supabase-storage.js` exports `SupabaseDatabaseProvider`, a standalone async CRUD module
+that reads and writes the three Supabase tables. It imports only `getSupabaseClient` from
+`supabase.js` and has no circular dependencies.
+
+The application is **not yet migrated to async cloud storage** — the existing synchronous
+`LocalStorage` path in `storage.js` remains the active provider. `SupabaseDatabaseProvider`
+will be wired in during Task 16.5 (async storage interface) and subsequent tasks. Until then,
+all finance data continues to be read from and written to `localStorage` as in Phases 1–15.

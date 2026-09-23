@@ -1111,7 +1111,7 @@ broken or removed.
       - No circular dependencies.
     - **Dependencies:** 16.2
 
-  - [~] 16.4 `SupabaseDatabaseProvider`
+  - [x] 16.4 `SupabaseDatabaseProvider`
     - **Objective:** Implement `SupabaseDatabaseProvider` in `storage.js` — a record-level CRUD provider that reads and writes to the three Supabase tables.
     - **Requirements covered:** 20, 10 (persistence), 13 (provider swappability)
     - **Files:** `js/storage.js`
