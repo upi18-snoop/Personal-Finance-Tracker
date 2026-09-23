@@ -80,6 +80,17 @@
   box-sizing: border-box;
 }
 
+/*
+ * Guarantee the HTML `hidden` attribute always collapses an element,
+ * regardless of specificity from other CSS rules (e.g. `.chart-container canvas
+ * { height: 300px }` cannot accidentally override the hidden state). Using
+ * `!important` here is intentional and correct — `hidden` is a semantic boolean
+ * attribute that must always win (Req 6.7, 7.7, 11.2).
+ */
+[hidden] {
+  display: none !important;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
 }
@@ -461,6 +472,157 @@ button:hover {
 }
 
 /* ==========================================================================
+   Mobile-first layout enforcement (task 9.1) — Req 12.1, 12.2, 12.3
+   ========================================================================== */
+
+/*
+ * Prevent horizontal scroll on the root viewport (Req 12.3).
+ * `overflow-x: hidden` on both html and body covers the two different root-
+ * scroll contexts browsers use. `overflow-wrap: break-word` ensures a long
+ * unbroken string (URL, account name, etc.) wraps rather than overflowing.
+ */
+html {
+  overflow-x: hidden;
+}
+
+body {
+  overflow-x: hidden;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/*
+ * Guarantee every top-level column/flex child can shrink below its natural
+ * content size. Without `min-width: 0`, a flex child whose content is wider
+ * than the viewport will overflow the container — the single most common cause
+ * of accidental horizontal scroll in flex layouts (Req 12.3).
+ */
+.app-header,
+.app-main,
+.app-footer,
+.section {
+  min-width: 0;
+}
+
+/*
+ * Flex rows inside section cards (balance cards, transaction rows, category
+ * items) must also be able to shrink. Setting `min-width: 0` on flex
+ * children here prevents any single row from punching past the card boundary.
+ */
+.balance-card,
+.transaction-row,
+.category-item {
+  min-width: 0;
+}
+
+/*
+ * Text-heavy inline elements inside rows must wrap and not force the row wider
+ * than the viewport (Req 12.3). `overflow-wrap: break-word` handles long
+ * unbreakable words; `min-width: 0` allows them to shrink as flex children.
+ */
+.transaction-row__name,
+.transaction-row__category,
+.transaction-row__type,
+.transaction-row__date,
+.category-item__name,
+.category-item__type {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
+}
+
+/*
+ * The amount label is right-aligned and uses `margin-left: auto`; it must
+ * not grow beyond a readable size or push the row wider. Giving it
+ * `flex-shrink: 0` keeps the amount visible while the name column takes the
+ * remaining space and wraps.
+ */
+.transaction-row__amount {
+  flex-shrink: 0;
+}
+
+/*
+ * Delete button on transaction rows (added dynamically by app.js, Req 3.3).
+ * Must meet the 44 × 44 px minimum touch target (Req 12.2). Using the
+ * shared `--control-min-height` token keeps it consistent with other controls.
+ */
+.transaction-row__delete {
+  flex-shrink: 0;
+  min-height: var(--control-min-height);
+  min-width: 44px;
+  padding: var(--space-2xs) var(--space-sm);
+  background-color: transparent;
+  color: var(--color-expense);
+  border: var(--border-width) solid var(--color-expense);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: var(--space-xs);
+}
+
+.transaction-row__delete:hover {
+  background-color: var(--color-expense);
+  color: var(--color-primary-contrast);
+}
+
+/*
+ * Ensure every <select> and <input> inside the app never overflows its
+ * containing column. `max-width: 100%` alone prevents stretching past the
+ * container edge; combined with `width: 100%` already set in .form-field it
+ * is robust even when content exceeds the viewport width.
+ */
+.form-field input,
+.form-field select {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/*
+ * The filter controls panel is a flex-column form. Its child `.form-field`
+ * elements must not overflow the card on narrow viewports.
+ */
+.filter-controls .form-field {
+  min-width: 0;
+}
+
+/*
+ * Month-selector section: the <input type="month"> should fill its container
+ * without overflowing on narrow screens.
+ */
+#selected-month {
+  max-width: 100%;
+  width: 100%;
+  min-height: var(--control-min-height);
+  box-sizing: border-box;
+}
+
+/*
+ * Category form and transaction form: buttons should fill the column on small
+ * screens so they are easily tappable (Req 12.2).
+ */
+.transaction-form .form-actions button,
+.category-form .form-actions button {
+  width: 100%;
+}
+
+/*
+ * Privacy footer should never overflow. Long text wraps naturally; no
+ * horizontal scroll risk introduced here.
+ */
+.privacy-section {
+  min-width: 0;
+}
+
+/*
+ * Chart canvas: already has `max-width: 100%` from the reset block.
+ * `overflow: hidden` is added to the existing `.chart-container` rule in the
+ * Chart containers section (task 7.1) below so Chart.js's responsive resize
+ * never temporarily expands wider than the viewport before it snaps back
+ * (Req 12.3).
+ */
+
+/* ==========================================================================
    Filter / search controls (task 6.3) — Req 4.1, 4.9, 4.12
    ========================================================================== */
 
@@ -548,11 +710,14 @@ button:hover {
    ========================================================================== */
 
 /* Constrain the chart area so the doughnut renders at a readable size on any
-   screen width. position: relative is required by Chart.js responsive mode. */
+   screen width. position: relative is required by Chart.js responsive mode.
+   overflow: hidden prevents Chart.js's responsive resize from briefly expanding
+   wider than the viewport on narrow screens (Req 12.3). */
 .chart-container {
   position: relative;
   max-width: 32rem;
   margin-inline: auto;
+  overflow: hidden;
 }
 
 /* Give each canvas a fixed height so Chart.js has a stable bounding box.
@@ -583,4 +748,82 @@ button:hover {
   padding: var(--space-lg) 0;
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
+}
+
+/* ==========================================================================
+   Category management (task 8.3) — Req 8.5, 8.6, 8.7, 15.2
+   ========================================================================== */
+
+/* Each category item in the list shows the name + type label on the left and a
+   Delete button on the right. Default categories are listed without a delete
+   button (they are read-only); custom categories have one. */
+.category-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.category-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.category-item__name {
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-base);
+}
+
+.category-item__type {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-transform: capitalize;
+}
+
+/* "Default" badge for built-in categories so the user understands they cannot
+   be deleted without a confusing error message. */
+.category-item__badge {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+/* Destructive delete button: red border/text on idle, red fill on hover so it
+   is visually distinct from the primary green action buttons. */
+.category-item__delete {
+  background-color: transparent;
+  color: var(--color-expense);
+  border: var(--border-width) solid var(--color-expense);
+  font-size: var(--font-size-sm);
+  min-height: var(--control-min-height);
+  padding: var(--space-2xs) var(--space-sm);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.category-item__delete:hover {
+  background-color: var(--color-expense);
+  color: var(--color-primary-contrast);
+}
+
+/* Section header for each type group (Expense / Income) within the list. */
+.category-list__group-heading {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: var(--space-md);
+  margin-bottom: var(--space-xs);
+  padding-bottom: var(--space-2xs);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.category-list__group-heading:first-child {
+  margin-top: 0;
 }

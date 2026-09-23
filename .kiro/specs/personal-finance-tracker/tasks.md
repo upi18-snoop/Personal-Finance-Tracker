@@ -342,7 +342,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ### Phase 7 — Charts
 
-- [ ] 7. Chart.js integration for category analysis
+- [x] 7. Chart.js integration for category analysis
   - [x] 7.1 Integrate Chart.js and initialize chart canvases
     - **Objective:** Set up `charts.js` to own all Chart.js instances and initialize the expense and income chart canvases once.
     - **Requirements covered:** 6.1, 15.6
@@ -354,7 +354,7 @@ across the document (dependency graph and coverage matrix reference them directl
       - Both chart canvases initialize once with an accessible text description available for each.
     - **Dependencies:** 1.1, 5.1
 
-  - [ ] 7.2 Implement expense-by-category and income-by-category chart updates
+  - [x] 7.2 Implement expense-by-category and income-by-category chart updates
     - **Objective:** Implement `updateExpenseChart` and `updateIncomeChart` grouping amounts by category, excluding zero-total categories.
     - **Requirements covered:** 6.1, 6.2, 7.1, 7.3
     - **Files:** `js/charts.js`, `js/app.js`
@@ -366,7 +366,7 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Dependencies:** 7.1, 5.1
 
 
-  - [ ] 7.4 Implement chart update/destroy lifecycle and reactivity
+  - [x] 7.4 Implement chart update/destroy lifecycle and reactivity
     - **Objective:** Manage chart lifecycle so charts update on add/delete/month change without duplicates or leaks.
     - **Requirements covered:** 6.3, 6.4, 6.5, 7.5, 7.6, 16.2
     - **Files:** `js/charts.js`, `js/app.js`
@@ -377,7 +377,7 @@ across the document (dependency graph and coverage matrix reference them directl
       - Adding/deleting a transaction or changing the month updates charts without creating duplicate instances or leaking memory.
     - **Dependencies:** 7.2, 4.2, 5.2
 
-  - [ ] 7.5 Implement empty chart states
+  - [x] 7.5 Implement empty chart states
     - **Objective:** Show an empty state instead of a broken/empty chart when there are no expense/income transactions in scope.
     - **Requirements covered:** 6.7, 7.7, 11.2
     - **Files:** `js/charts.js`, `css/styles.css`
@@ -392,8 +392,8 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ### Phase 8 — Custom Categories
 
-- [ ] 8. Custom category management
-  - [ ] 8.1 Implement category business logic (get, add, validate, delete rules)
+- [x] 8. Custom category management
+  - [x] 8.1 Implement category business logic (get, add, validate, delete rules)
     - **Objective:** Implement `categories.js` with defaults+custom reads, duplicate-prevented add, and in-use-guarded delete.
     - **Requirements covered:** 8.1, 8.2, 8.3, 8.4, 8.6, 8.7, 8.8
     - **Files:** `js/categories.js`
@@ -407,7 +407,7 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Dependencies:** 2.3, 3.1
 
 
-  - [ ] 8.3 Build the category management UI and wire it to the transaction form
+  - [x] 8.3 Build the category management UI and wire it to the transaction form
     - **Objective:** Display custom categories, allow add/delete with messages, and make categories selectable in the transaction form per type.
     - **Requirements covered:** 8.2, 8.4, 8.5, 8.7, 15.2
     - **Files:** `index.html`, `js/app.js`, `css/styles.css`, `js/dashboard.js`
@@ -424,7 +424,7 @@ across the document (dependency graph and coverage matrix reference them directl
 ### Phase 9 — Responsive UI
 
 - [ ] 9. Responsive, touch-friendly layout
-  - [ ] 9.1 Implement mobile-first layout with no horizontal scroll
+  - [x] 9.1 Implement mobile-first layout with no horizontal scroll
     - **Objective:** Ensure all sections stack cleanly on mobile with touch-friendly controls and no horizontal scrolling.
     - **Requirements covered:** 12.1, 12.2, 12.3
     - **Files:** `css/styles.css`

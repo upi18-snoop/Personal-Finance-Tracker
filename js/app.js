@@ -122,6 +122,12 @@ function resetTransactionForm(form) {
  * Handle an add-transaction submission (Req 2.1, 2.13). Delegates all
  * validation and persistence to transactions.addTransaction (business logic);
  * this UI handler only maps the result to inline messages or a form reset.
+ *
+ * On success, calls `renderAll()` which triggers the full reporting-scope
+ * re-render path: dashboard totals, Monthly_Summary, and both category charts
+ * (expense + income) via `renderReports()` → `charts.updateExpenseChart /
+ * updateIncomeChart`. Charts update in-place via `chart.update()` — no
+ * destroy/recreate, no duplicate instances (Req 6.3, 16.2).
  * @param {{ type: string, itemName: string, amount: string, category: string, date: string }} formData
  * @param {HTMLFormElement} form
  * @returns {{ ok: boolean }}
@@ -442,6 +448,15 @@ function formatMoney(amount) {
  * report/chart renderers, so both the reporting-affecting actions (add/delete
  * via renderAll) and a month change (onSelectedMonthChange) share one path.
  *
+ * Chart update lifecycle (Req 6.3, 6.4, 6.5, 7.5, 7.6, 16.2):
+ *   - `updateExpenseChart` and `updateIncomeChart` call `chart.update()` in-place on
+ *     the existing Chart instances (no destroy/recreate on normal updates), so no
+ *     duplicate chart objects are ever created and no memory leaks occur.
+ *   - The instances were created once in `bootstrap()` via `charts.initCharts()`.
+ *   - If an instance is somehow null (canvas absent at boot), `update*` lazily calls
+ *     `initCharts()` which destroys any stale instance before creating a fresh one —
+ *     the destroy-before-create contract is enforced inside `charts.js`.
+ *
  * It deliberately does NOT touch the Transaction_List — that belongs to the
  * independent filter scope (Req 4.12 / 5.9).
  * @returns {void}
@@ -537,6 +552,11 @@ function addDeleteControls() {
  * retained unchanged and nothing is persisted (Req 3.4); on confirm the
  * deletion is delegated to the business logic layer (which persists the updated
  * set, Req 3.5/3.6) and the Transaction_List is re-rendered.
+ *
+ * On confirm + success, calls `renderAll()` which triggers the full reporting-scope
+ * re-render path including both category charts via `renderReports()` →
+ * `charts.updateExpenseChart / updateIncomeChart`. Charts update in-place via
+ * `chart.update()` — no destroy/recreate, no duplicate instances (Req 6.4, 16.2).
  * @param {string} id
  * @returns {{ ok: boolean }}
  */
@@ -607,6 +627,11 @@ function wireTransactionListDeletion() {
  * list is driven by the separate filter scope, so a reporting-month change
  * never moves it (Req 5.9).
  *
+ * Both category charts update in-place via `chart.update()` through
+ * `renderReports()` → `charts.updateExpenseChart / updateIncomeChart`. No
+ * destroy/recreate occurs for a month change — no duplicate instances or leaks
+ * (Req 6.5, 16.2).
+ *
  * A blank month (e.g. the user clears the native picker) falls back to the
  * current month so the reporting scope always has a valid "YYYY-MM" key.
  * @param {string} month "YYYY-MM" month key from the selector.
@@ -643,6 +668,256 @@ function wireMonthSelector() {
   });
 }
 
+/* --------------------------------------------------------------------------
+ * Category management UI (task 8.3)
+ *
+ * Renders the custom category list grouped by type (Expense then Income).
+ * Default categories are shown with a "(default)" badge and no delete button —
+ * they are read-only (Req 8.6). Custom categories show a labelled Delete button
+ * so the user can remove them (Req 8.5).
+ *
+ * After any add or delete the category list is re-rendered, the transaction
+ * form's category <select> is refreshed (so the new/removed category appears
+ * immediately for the currently-selected type, Req 8.4), and the filter
+ * category <select> is repopulated (so the filter also reflects the change).
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Default category sets mirrored from categories.js / storage.js.
+ * Used only to decide whether a listed category is a default (and should show
+ * the read-only badge instead of a delete button).
+ */
+const _DEFAULT_EXPENSE_NAMES = new Set([
+  "Food", "Transport", "Fun", "Bills", "Shopping", "Health", "Other",
+]);
+const _DEFAULT_INCOME_NAMES = new Set([
+  "Salary", "Freelance", "Business", "Investment", "Gift", "Other",
+]);
+
+/**
+ * True if `name` is one of the built-in default categories for `type`.
+ * @param {string} name
+ * @param {"income"|"expense"} type
+ * @returns {boolean}
+ */
+function isDefaultCategory(name, type) {
+  if (type === "expense") return _DEFAULT_EXPENSE_NAMES.has(name);
+  if (type === "income") return _DEFAULT_INCOME_NAMES.has(name);
+  return false;
+}
+
+/**
+ * Build a single category list item `<li>` for the category management panel
+ * (Req 8.5). Default categories get a "(default)" badge and no delete button;
+ * custom categories get a labelled Delete button (Req 15.5).
+ *
+ * All user-provided text is written via `safeText` (never innerHTML).
+ * @param {string} name
+ * @param {"income"|"expense"} type
+ * @returns {HTMLLIElement}
+ */
+function buildCategoryItem(name, type) {
+  const li = document.createElement("li");
+  li.className = "category-item";
+  li.dataset.name = name;
+  li.dataset.type = type;
+
+  const info = document.createElement("div");
+  info.className = "category-item__info";
+
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "category-item__name";
+  utils.safeText(nameSpan, name);
+
+  const typeSpan = document.createElement("span");
+  typeSpan.className = "category-item__type";
+  utils.safeText(typeSpan, type);
+
+  info.append(nameSpan, typeSpan);
+  li.appendChild(info);
+
+  if (isDefaultCategory(name, type)) {
+    // Default: read-only badge, no delete control.
+    const badge = document.createElement("span");
+    badge.className = "category-item__badge";
+    utils.safeText(badge, "default");
+    li.appendChild(badge);
+  } else {
+    // Custom: labelled delete button (Req 15.5 accessible label).
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "category-item__delete";
+    deleteBtn.dataset.action = "delete-category";
+    utils.safeText(deleteBtn, "Delete");
+    deleteBtn.setAttribute("aria-label", `Delete category ${name}`);
+    li.appendChild(deleteBtn);
+  }
+
+  return li;
+}
+
+/**
+ * Render the category management list (Req 8.5). Groups categories under
+ * "Expense" and "Income" headings; renders defaults first, then custom, within
+ * each group (matching the storage order returned by `categories.getCategories`).
+ *
+ * The list element is `#category-list` in `index.html`. If it is absent this
+ * is a no-op so the rest of the app is unaffected.
+ * @returns {void}
+ */
+function renderCategoryList() {
+  const listEl = document.getElementById("category-list");
+  if (!listEl) return;
+
+  listEl.replaceChildren();
+
+  for (const type of ["expense", "income"]) {
+    const heading = document.createElement("li");
+    heading.className = "category-list__group-heading";
+    utils.safeText(heading, type === "expense" ? "Expense categories" : "Income categories");
+    listEl.appendChild(heading);
+
+    const catNames = categories.getCategories(type);
+    for (const name of catNames) {
+      listEl.appendChild(buildCategoryItem(name, type));
+    }
+  }
+}
+
+/**
+ * Refresh every UI surface that depends on the category set after an add or
+ * delete: the category list panel, the transaction form's category dropdown
+ * (for the currently-selected type), and the filter category dropdown.
+ * @returns {void}
+ */
+function refreshCategoryUI() {
+  renderCategoryList();
+
+  // Refresh the transaction form's category options for the current type so
+  // a newly-added custom category is immediately available (Req 8.4).
+  const typeEl = document.getElementById("transaction-type");
+  const categoryEl = document.getElementById("transaction-category");
+  if (typeEl && categoryEl) {
+    dashboard.renderCategoryOptions(categoryEl, typeEl.value);
+  }
+
+  // Repopulate the filter category <select> so the new/removed category is
+  // reflected in the filter panel too.
+  populateCategoryFilter();
+}
+
+/**
+ * Handle adding a custom category (Req 8.2, 8.3). Delegates validation and
+ * persistence to `categories.addCategory`; maps the result to an inline message
+ * or resets the form on success.
+ *
+ * Error messages (Req 8.2):
+ *   - duplicate: "A category with that name already exists"
+ *   - invalid (blank): "Category name is required"
+ * @param {{ name: string, type: string }} formData
+ * @param {HTMLFormElement} form
+ * @returns {{ ok: boolean }}
+ */
+function onAddCategory(formData, form) {
+  const errorEl = document.getElementById("category-form-error");
+  utils.safeText(errorEl, "");
+
+  const type = formData.type === "income" ? "income" : "expense";
+  const result = categories.addCategory(formData.name, type);
+
+  if (!result.ok) {
+    const message =
+      result.error === "duplicate"
+        ? "A category with that name already exists"
+        : "Category name is required";
+    utils.safeText(errorEl, message);
+    return { ok: false };
+  }
+
+  // Success: reset the form and refresh all category-dependent UI surfaces.
+  form.reset();
+  refreshCategoryUI();
+  return { ok: true };
+}
+
+/**
+ * Handle deleting a custom category (Req 8.6, 8.7). Delegates to
+ * `categories.deleteCategory`; refuses with an inline message when the
+ * category is in use (Req 8.7). Transactions are NEVER deleted (Req 8.8 is
+ * enforced in the business logic layer; this UI layer simply shows the reason).
+ *
+ * Error messages:
+ *   - in-use: "Category is in use by existing transactions and cannot be deleted"
+ *   - default: "Default categories cannot be deleted"
+ * @param {string} name
+ * @param {"income"|"expense"} type
+ * @returns {{ ok: boolean }}
+ */
+function onDeleteCategory(name, type) {
+  const errorEl = document.getElementById("category-form-error");
+  utils.safeText(errorEl, "");
+
+  const result = categories.deleteCategory(name, type);
+
+  if (!result.ok) {
+    const message =
+      result.error === "in-use"
+        ? "Category is in use by existing transactions and cannot be deleted"
+        : "Default categories cannot be deleted";
+    utils.safeText(errorEl, message);
+    return { ok: false };
+  }
+
+  // Success: refresh all category-dependent UI surfaces.
+  refreshCategoryUI();
+  return { ok: true };
+}
+
+/**
+ * Wire the category management form: submit → onAddCategory, and delegated
+ * click on the category list → onDeleteCategory (Req 8.5, 8.6, 8.7, 15.2).
+ * The form inputs already have associated `<label>` elements in `index.html`
+ * (Req 15.2). Uses event delegation on `#category-list` so dynamically-added
+ * rows are covered without re-wiring.
+ * @returns {void}
+ */
+function wireCategoryForm() {
+  const form = document.getElementById("category-form");
+  if (!form) return;
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const nameEl = form.querySelector("#category-name");
+    const typeEl = form.querySelector("#category-type");
+    onAddCategory(
+      {
+        name: nameEl ? nameEl.value : "",
+        type: typeEl ? typeEl.value : "expense",
+      },
+      form
+    );
+  });
+
+  // Delegated delete: a single listener on the list handles every delete button
+  // (present and future), reading the name/type from the enclosing <li>.
+  const listEl = document.getElementById("category-list");
+  if (!listEl) return;
+
+  listEl.addEventListener("click", (event) => {
+    const trigger = event.target.closest('[data-action="delete-category"]');
+    if (!trigger || !listEl.contains(trigger)) return;
+
+    const row = trigger.closest(".category-item");
+    if (!row) return;
+
+    const name = row.dataset.name;
+    const type = row.dataset.type;
+    if (!name || !type) return;
+
+    onDeleteCategory(name, type);
+  });
+}
+
 /**
  * Bootstrap the app on load. Initializes storage, then wires the UI event
  * handlers implemented so far (task 3.3 wires the add-transaction form). Render
@@ -652,10 +927,6 @@ function wireMonthSelector() {
 function bootstrap() {
   // Ensure a valid persisted schema exists before any read/write (Req 10.4).
   storage.initializeData();
-
-  // Referencing the not-yet-wired namespaces keeps the module graph live and
-  // verifies layering until their phases land.
-  void categories;
 
   wireTransactionForm();
 
@@ -674,6 +945,13 @@ function bootstrap() {
   // after the DOM is ready and before renderAll so the first renderReports()
   // call finds live chart instances to update.
   charts.initCharts();
+
+  // Category management UI (task 8.3, Req 8.5). Wire the add-category form and
+  // the delegated delete on the category list. Initial render of the list
+  // happens via renderCategoryList() inside wireCategoryForm setup — called
+  // explicitly here so the panel is populated on first paint.
+  wireCategoryForm();
+  renderCategoryList();
 
   // Initial paint of every current view for the persisted state: the Dashboard
   // (totals, count, Selected_Month, recent transactions — task 4.1,

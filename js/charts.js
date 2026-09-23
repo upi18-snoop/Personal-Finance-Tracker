@@ -122,6 +122,14 @@ export function initCharts() {
     options: commonOptions,
   });
 
+  // Hide both canvases immediately after creation (Req 6.7, 7.7, 11.2).
+  // The first updateExpenseChart / updateIncomeChart call will un-hide them only
+  // when there is real data to display, preventing a flash of a blank/broken
+  // chart between initCharts() and the first update. The empty-state paragraphs
+  // start hidden in HTML and are shown by _applyChartData when needed.
+  expenseCanvas.hidden = true;
+  incomeCanvas.hidden = true;
+
   // Accessible text descriptions for screen readers (Req 15.6).
   const expenseDesc = document.getElementById("expense-chart-description");
   const incomeDesc = document.getElementById("income-chart-description");
@@ -134,8 +142,16 @@ export function initCharts() {
  * -------------------------------------------------------------------------- */
 
 /**
- * Destroy existing chart instances to prevent duplicates/leaks (Req 16.2).
- * Sets module-level variables back to null after destruction.
+ * Destroy existing chart instances to prevent duplicates and memory leaks (Req 16.2).
+ *
+ * This is the correct tear-down step before reinitialising — the lifecycle contract
+ * is always: destroyCharts() → initCharts() (new instances), never create-on-top-of-live.
+ * `initCharts()` calls this at its own top so callers do not need to call it manually
+ * before reinitialising; it is exposed for explicit resets (e.g. test teardown or a future
+ * hard-reset flow).
+ *
+ * Sets module-level variables back to null after destruction so subsequent `update*`
+ * calls correctly detect the uninitialised state.
  * @returns {void}
  */
 export function destroyCharts() {
@@ -216,18 +232,22 @@ function _applyChartData(
  * -------------------------------------------------------------------------- */
 
 /**
- * Update the expense-by-category chart from a category-total Map (Req 6.2).
- * If the chart has not been initialised yet, calls initCharts() first.
- * Zero-total categories are excluded from the rendered chart.
- * Shows the empty state when there is no data for the period.
+ * Update the expense-by-category chart from a category-total Map (Req 6.2, 6.3, 6.4, 6.5).
+ * Uses `chart.update()` in-place via `_applyChartData` — NO destroy/recreate on normal updates,
+ * so no duplicate instances are created and no memory is leaked (Req 16.2).
+ *
+ * If the chart has not been initialised yet (e.g. canvas was absent at boot), calls
+ * `initCharts()` first. Zero-total categories are excluded from the rendered chart.
+ * Shows the empty state when there is no data for the period (Req 6.7).
  *
  * @param {Map<string, number>} categoryTotals
  * @param {Function} [formatMoney] Optional formatter (amount) → string.
  * @returns {void}
  */
 export function updateExpenseChart(categoryTotals, formatMoney) {
+  // Defensive: if the canvas is not in the DOM yet, initCharts() will warn and return early.
   if (expenseChart === null) initCharts();
-  if (expenseChart === null) return; // initCharts failed (Chart.js unavailable)
+  if (expenseChart === null) return; // initCharts failed (Chart.js unavailable or canvas absent)
 
   _applyChartData(
     expenseChart,
@@ -246,18 +266,22 @@ export function updateExpenseChart(categoryTotals, formatMoney) {
  * -------------------------------------------------------------------------- */
 
 /**
- * Update the income-by-category chart from a category-total Map (Req 7.3).
- * If the chart has not been initialised yet, calls initCharts() first.
- * Zero-total categories are excluded from the rendered chart.
- * Shows the empty state when there is no data for the period.
+ * Update the income-by-category chart from a category-total Map (Req 7.3, 7.5, 7.6).
+ * Uses `chart.update()` in-place via `_applyChartData` — NO destroy/recreate on normal updates,
+ * so no duplicate instances are created and no memory is leaked (Req 16.2).
+ *
+ * If the chart has not been initialised yet (e.g. canvas was absent at boot), calls
+ * `initCharts()` first. Zero-total categories are excluded from the rendered chart.
+ * Shows the empty state when there is no data for the period (Req 7.7).
  *
  * @param {Map<string, number>} categoryTotals
  * @param {Function} [formatMoney] Optional formatter (amount) → string.
  * @returns {void}
  */
 export function updateIncomeChart(categoryTotals, formatMoney) {
+  // Defensive: if the canvas is not in the DOM yet, initCharts() will warn and return early.
   if (incomeChart === null) initCharts();
-  if (incomeChart === null) return; // initCharts failed (Chart.js unavailable)
+  if (incomeChart === null) return; // initCharts failed (Chart.js unavailable or canvas absent)
 
   _applyChartData(
     incomeChart,
