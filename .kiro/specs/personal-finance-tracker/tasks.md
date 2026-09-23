@@ -961,7 +961,7 @@ broken or removed.
       - Incorrect credentials ? normalized error message displayed, no crash.
     - **Dependencies:** 15.2, 15.3
 
-  - [ ] 15.5 Logout
+  - [x] 15.5 Logout
     - **Objective:** Add a logout button, wire it to `auth.signOut()`, clear in-memory state, and return to the login screen.
     - **Requirements covered:** 19.3
     - **Files:** `index.html`, `js/app.js`, `css/styles.css`
@@ -973,7 +973,7 @@ broken or removed.
       - Clicking logout clears the session and returns to the login UI; no financial data is visible after logout.
     - **Dependencies:** 15.4
 
-  - [ ] 15.6 Password Reset
+  - [x] 15.6 Password Reset
     - **Objective:** Add a forgot-password form, wire it to `auth.resetPassword()`, and handle the redirect back from the email link.
     - **Requirements covered:** 19.4
     - **Files:** `index.html`, `js/app.js`, `css/styles.css`
@@ -987,7 +987,7 @@ broken or removed.
       - Following the email link lands on the new-password form; setting a new password succeeds.
     - **Dependencies:** 15.4
 
-  - [ ] 15.7 Session Persistence
+  - [x] 15.7 Session Persistence
     - **Objective:** Verify that an authenticated session survives browser close and reopen, and that the auth state is detected synchronously on load.
     - **Requirements covered:** 19.5
     - **Files:** `js/app.js`, `js/auth.js`

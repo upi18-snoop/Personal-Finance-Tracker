@@ -48,6 +48,7 @@ const state = {
   selectedMonth: currentMonthKey(),
   filterCriteria: { searchTerm: "", type: "all", category: "", month: "" },
   selectedCurrency: "IDR", // overwritten in bootstrap() from storage.getCurrency()
+  currentUser: null,
 };
 
 /* --------------------------------------------------------------------------
@@ -1036,11 +1037,13 @@ function showRegisterView() {
  */
 function hideRegisterView() {
   const registerSection = document.getElementById("register-section");
-  const appMain = document.getElementById("app-main");
   if (registerSection) registerSection.hidden = true;
-  if (appMain) appMain.hidden = false;
-  // Clear any stale form state when returning to the app.
   resetRegisterForm();
+  // Only show app-main if the user is authenticated.
+  // If signed out, keep app-main hidden â€” the auth buttons in the header remain accessible.
+  if (state.currentUser) {
+    showProtectedApp();
+  }
 }
 
 /**
@@ -1320,10 +1323,13 @@ function showLoginView() {
  */
 function hideLoginView() {
   const loginSection = document.getElementById('login-section');
-  const appMain = document.getElementById('app-main');
   if (loginSection) loginSection.hidden = true;
-  if (appMain) appMain.hidden = false;
   resetLoginForm();
+  // Only show app-main if the user is authenticated.
+  // If signed out, keep app-main hidden â€” the auth buttons in the header remain accessible.
+  if (state.currentUser) {
+    showProtectedApp();
+  }
 }
 
 /**
@@ -1460,6 +1466,74 @@ function showSignedInState(email) {
   if (signedInBadge) signedInBadge.hidden = false;
   if (showLoginBtn) showLoginBtn.hidden = true;
   if (showRegisterBtn) showRegisterBtn.hidden = true;
+
+  // Track the current user in state.
+  state.currentUser = { email };
+}
+
+/**
+ * Update the header to reflect a signed-out state.
+ * Hides the authenticated email badge, shows the Sign in / Create account
+ * buttons, and clears the stored current user.
+ * @returns {void}
+ */
+function showSignedOutState() {
+  state.currentUser = null;
+
+  const signedInBadge = document.getElementById('auth-signed-in');
+  const signedInEmail = document.getElementById('auth-signed-in-email');
+  const showLoginBtn = document.getElementById('show-login-button');
+  const showRegisterBtn = document.getElementById('show-register-button');
+
+  if (signedInBadge) signedInBadge.hidden = true;
+  if (signedInEmail) utils.safeText(signedInEmail, '');
+  if (showLoginBtn) showLoginBtn.hidden = false;
+  if (showRegisterBtn) showRegisterBtn.hidden = false;
+}
+
+/**
+ * Handle a logout request (task 15.5, Req 19.3).
+ *
+ * Always navigates back to the login view regardless of whether auth.signOut()
+ * succeeds — a network error must not trap the user in a signed-in state. The
+ * Supabase session token in localStorage is cleared by supabase-js on signOut;
+ * locally we clear state.currentUser and hide the finance dashboard so no
+ * financial data remains visible in the DOM.
+ *
+ * Uses the void-returning async IIFE pattern consistent with onLoginSubmit and
+ * onRegisterSubmit to avoid making the click handler itself async.
+ * @returns {void}
+ */
+function onLogout() {
+  (async () => {
+    // Call the auth layer — the only layer that knows about Supabase.
+    // We deliberately ignore the result: the local session is cleared either way.
+    await auth.signOut();
+
+    // Clear the in-memory current user and restore the header nav to its
+    // signed-out appearance (login/register buttons visible, email badge hidden).
+    showSignedOutState();
+
+    // Hide the finance dashboard so no financial data is visible after logout.
+    const appMain = document.getElementById('app-main');
+    if (appMain) appMain.hidden = true;
+
+    // Navigate to the login view.
+    showLoginView();
+  })();
+}
+
+/**
+ * Wire the logout button to onLogout (task 15.5, Req 19.3).
+ * The button lives inside #auth-signed-in which is hidden by default, so it
+ * is only reachable when a user is signed in.
+ * @returns {void}
+ */
+function wireLogoutButton() {
+  const logoutBtn = document.getElementById('logout-button');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', onLogout);
+  }
 }
 
 /**
@@ -1527,13 +1601,9 @@ function onLoginSubmit(event) {
       if (successEl) successEl.hidden = false;
 
       // Update header to show the authenticated email.
+      // The onAuthStateChange callback (registered in initAuthSession) handles
+      // showing the protected app and initializing the finance application (task 15.8).
       showSignedInState(result.user.email);
-
-      // Restore the finance dashboard in the background (the login view will
-      // still be visible showing the success message; Task 15.8 will handle
-      // the full automated transition to the protected dashboard).
-      const appMain = document.getElementById('app-main');
-      if (appMain) appMain.hidden = false;
 
       return;
     }
@@ -1580,15 +1650,407 @@ function wireLoginForm() {
       showRegisterView();
     });
   }
+
+  // "Forgot password?" link inside the login view switches to the reset view.
+  const forgotBtn = document.getElementById('login-forgot-password-button');
+  if (forgotBtn) {
+    forgotBtn.addEventListener('click', showResetPasswordView);
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Password Reset (task 15.6)
+ *
+ * Self-contained password-reset form handler. Provides the "Forgot password?"
+ * flow: user enters their email, auth.resetPassword() sends a Supabase
+ * password-reset email, and a confirmation message is shown.
+ *
+ * Architecture:
+ *   Password Reset UI → app.js (onResetPasswordSubmit) → auth.resetPassword() → Supabase Auth
+ *
+ * No direct Supabase calls are made from this module.
+ * Security: passwords are never logged, stored, or returned. The success
+ * message deliberately does not reveal whether the email is registered.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Show the password-reset section and hide the finance dashboard and login.
+ * @returns {void}
+ */
+function showResetPasswordView() {
+  const resetSection = document.getElementById('reset-password-section');
+  const appMain = document.getElementById('app-main');
+  const loginSection = document.getElementById('login-section');
+  if (resetSection) resetSection.hidden = false;
+  if (appMain) appMain.hidden = true;
+  if (loginSection) loginSection.hidden = true;
+  // Clear any stale state from a previous visit to this form.
+  resetResetPasswordForm();
 }
 
 /**
- * Bootstrap the app on load. Initializes storage, then wires the UI event
- * handlers implemented so far (task 3.3 wires the add-transaction form). Render
- * orchestration for dashboard/reports/charts is added in later phases.
+ * Hide the password-reset section and show the login view.
+ * Called by the "Back to sign in" button.
  * @returns {void}
  */
-function bootstrap() {
+function hideResetPasswordView() {
+  const resetSection = document.getElementById('reset-password-section');
+  if (resetSection) resetSection.hidden = true;
+  resetResetPasswordForm();
+  showLoginView();
+}
+
+/**
+ * Reset the password-reset form to its empty default state.
+ * Clears all field values, validation messages, and the success block.
+ * Re-enables the submit button so a returning user can try again.
+ * @returns {void}
+ */
+function resetResetPasswordForm() {
+  const form = document.getElementById('reset-password-form');
+  if (form) form.reset();
+  clearResetPasswordErrors();
+  const successEl = document.getElementById('reset-password-success');
+  if (successEl) successEl.hidden = true;
+  const submitBtn = document.getElementById('reset-password-submit-button');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    utils.safeText(submitBtn, 'Send reset email');
+  }
+}
+
+/**
+ * Clear all inline validation and error messages on the password-reset form.
+ * @returns {void}
+ */
+function clearResetPasswordErrors() {
+  const form = document.getElementById('reset-password-form');
+  if (!form) return;
+  for (const el of form.querySelectorAll('[data-field-error]')) {
+    utils.safeText(el, '');
+  }
+  utils.safeText(document.getElementById('reset-password-form-error'), '');
+}
+
+/**
+ * Validate the password-reset form input before calling auth.resetPassword().
+ * Returns an array of { field, message } errors. Empty array means valid.
+ *
+ * Rules:
+ *   - email: required, must pass basic format check
+ *
+ * @param {{ email: string }} values
+ * @returns {{ field: string, message: string }[]}
+ */
+function validateResetPasswordForm(values) {
+  const errors = [];
+
+  if (!values.email || values.email.trim() === '') {
+    errors.push({ field: 'email', message: 'Email address is required.' });
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) {
+    errors.push({ field: 'email', message: 'Please enter a valid email address.' });
+  }
+
+  return errors;
+}
+
+/**
+ * Display inline validation errors on the password-reset form.
+ * Unrecognized field names fall through to the form-level error element.
+ * @param {{ field: string, message: string }[]} errors
+ * @returns {void}
+ */
+function showResetPasswordErrors(errors) {
+  clearResetPasswordErrors();
+  const form = document.getElementById('reset-password-form');
+  if (!form) return;
+  const unassigned = [];
+  for (const error of errors) {
+    const slot = form.querySelector(`[data-field-error="${error.field}"]`);
+    if (slot) {
+      utils.safeText(slot, error.message);
+    } else {
+      unassigned.push(error.message);
+    }
+  }
+  if (unassigned.length > 0) {
+    utils.safeText(
+      document.getElementById('reset-password-form-error'),
+      unassigned.join(' ')
+    );
+  }
+}
+
+/**
+ * Map a normalized auth error to a user-friendly password-reset message.
+ * Does not reveal whether the email address is registered (security best
+ * practice — the success message also uses neutral language for the same reason).
+ * Passwords are never included in error messages.
+ * @param {{ code: string, message: string } | undefined} error
+ * @returns {string}
+ */
+function getResetPasswordErrorMessage(error) {
+  if (!error) return 'Something went wrong. Please try again.';
+  switch (error.code) {
+    case 'invalid-email':
+      return 'Please enter a valid email address.';
+    case 'rate-limited':
+      return 'Too many attempts. Please wait a moment and try again.';
+    case 'network-error':
+      return 'Network error. Please check your connection and try again.';
+    case 'not-configured':
+      return 'Authentication is not configured yet. Please add your Supabase credentials to js/config.js.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
+}
+
+/**
+ * Handle password-reset form submission (task 15.6, Req 19.4).
+ *
+ * Flow:
+ *   1. Read form values.
+ *   2. Run client-side validation (empty / format checks).
+ *   3. If invalid: show inline errors, do not call auth.resetPassword().
+ *   4. If valid: disable button, show loading state, call auth.resetPassword().
+ *   5. On success: show confirmation message (neutral — does not reveal
+ *      whether the email is registered, per security best practice).
+ *   6. On error: show normalized message, re-enable button.
+ *
+ * The redirect URL is derived from window.location.origin inside auth.js, so
+ * it works correctly on both localhost and GitHub Pages without hard-coding.
+ * Passwords are NEVER logged, stored, or returned to callers.
+ *
+ * @param {Event} event
+ * @returns {void}
+ */
+function onResetPasswordSubmit(event) {
+  event.preventDefault();
+
+  const form = document.getElementById('reset-password-form');
+  if (!form) return;
+
+  const emailEl = document.getElementById('reset-email');
+  const submitBtn = document.getElementById('reset-password-submit-button');
+
+  const values = {
+    email: emailEl ? emailEl.value : '',
+  };
+
+  // 1. Client-side validation — do not call Supabase with invalid input.
+  const validationErrors = validateResetPasswordForm(values);
+  if (validationErrors.length > 0) {
+    showResetPasswordErrors(validationErrors);
+    return;
+  }
+
+  // 2. Clear previous errors and enter loading state.
+  //    Disable the button to prevent duplicate submissions.
+  clearResetPasswordErrors();
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    utils.safeText(submitBtn, 'Sending\u2026');
+  }
+
+  // 3. Delegate to auth.js — the only layer that knows about Supabase.
+  //    The redirect URL is derived from window.location.origin inside auth.js.
+  //    Use a void-returning async IIFE to avoid making the handler async.
+  (async () => {
+    const result = await auth.resetPassword(values.email);
+
+    if (result.ok) {
+      // Success: show a neutral confirmation that does not reveal whether the
+      // email is registered (security best practice, Req 19.4).
+      const successEl = document.getElementById('reset-password-success');
+      const successMsg = document.getElementById('reset-password-success-message');
+      if (successMsg) {
+        utils.safeText(
+          successMsg,
+          'If an account exists for this email, a password reset link has been sent. Please check your inbox (and spam folder).'
+        );
+      }
+      if (successEl) successEl.hidden = false;
+      // Keep the button disabled after success so the user cannot re-submit
+      // (they should wait for the email rather than spam the endpoint).
+      return;
+    }
+
+    // Error: map to a user-friendly message and re-enable the button.
+    const errorMessage = getResetPasswordErrorMessage(result.error);
+    utils.safeText(document.getElementById('reset-password-form-error'), errorMessage);
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      utils.safeText(submitBtn, 'Send reset email');
+    }
+  })();
+}
+
+/**
+ * Wire the password-reset form and navigation buttons (task 15.6).
+ * Attaches to #reset-password-form and #reset-password-back-button.
+ * The "Forgot password?" entry point in the login form is wired in wireLoginForm().
+ * @returns {void}
+ */
+function wireResetPasswordForm() {
+  const form = document.getElementById('reset-password-form');
+  if (form) {
+    form.addEventListener('submit', onResetPasswordSubmit);
+  }
+
+  // "← Back to sign in" returns to the login view and clears reset state.
+  const backBtn = document.getElementById('reset-password-back-button');
+  if (backBtn) {
+    backBtn.addEventListener('click', hideResetPasswordView);
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Session persistence & auth state (task 15.7)
+ *
+ * Detects an existing Supabase session on page load and registers a single
+ * auth-state listener to keep state.currentUser and the header UI synchronized
+ * whenever authentication state changes (Req 19.5, 19.6).
+ *
+ * Architecture:
+ *   initAuthSession() → auth.getCurrentUser() / auth.onAuthStateChange()
+ *                     → showSignedInState() / showSignedOutState()
+ *
+ * Security invariants:
+ *   - No tokens, passwords, or session objects are stored manually.
+ *   - Supabase Auth manages session persistence internally.
+ *   - state.currentUser is runtime UI state, not an auth store.
+ *   - The listener is registered exactly once; no duplicate listeners.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Initialise authentication session detection and state synchronization
+ * (task 15.7, Req 19.5, 19.6).
+ *
+ * Step 1: Register one auth-state listener via auth.onAuthStateChange() so
+ * that future sign-in, sign-out, token-refresh, and session-restore events
+ * keep state.currentUser and the header UI in sync automatically.
+ *
+ * Step 2: Detect any existing Supabase session via auth.getCurrentUser().
+ * If a user is returned, restore the signed-in state. If not, keep the
+ * signed-out state. Fails safely — an error from getCurrentUser() is caught
+ * and logged; the application continues normally in a signed-out state.
+ *
+ * This function must be called ONCE during bootstrap(). It must NOT be called
+ * more than once (which would register duplicate listeners).
+ *
+ * Passwords are never stored, logged, or returned. Tokens are never stored
+ * manually — Supabase Auth manages session persistence internally.
+ *
+ * @returns {Promise<void>}
+ */
+async function initAuthSession() {
+  // ── Step 1: register the auth-state listener first ──────────────────────
+  // Registering before the initial getCurrentUser() call ensures we never
+  // miss a state change that fires during or shortly after initialisation.
+  //
+  // The listener is registered exactly once here. It must not be registered
+  // again elsewhere in the application to avoid duplicate state updates.
+  auth.onAuthStateChange((event, user) => {
+    // user is the normalized { id, email } object from auth.js, or null.
+    if (user) {
+      // A user is now signed in (SIGNED_IN, TOKEN_REFRESHED, INITIAL_SESSION
+      // with an active session, USER_UPDATED, etc.).
+      state.currentUser = user;
+      showSignedInState(user.email);
+      showProtectedApp();
+      initializeFinanceApplication(); // no-op if already initialized
+      // Close any open auth sections so the finance app is immediately visible.
+      const loginSection = document.getElementById('login-section');
+      const registerSection = document.getElementById('register-section');
+      const resetSection = document.getElementById('reset-password-section');
+      if (loginSection) loginSection.hidden = true;
+      if (registerSection) registerSection.hidden = true;
+      if (resetSection) resetSection.hidden = true;
+    } else {
+      // No authenticated user (SIGNED_OUT, INITIAL_SESSION with no session).
+      state.currentUser = null;
+      showSignedOutState();
+      hideProtectedApp();
+    }
+  });
+
+  // ── Step 2: detect an existing session on this page load ─────────────────
+  // auth.getCurrentUser() verifies the JWT with Supabase (not just the local
+  // cache) and returns null when configuration uses placeholders, when there
+  // is no active session, or when the token has expired.
+  //
+  // Note: when Supabase IS configured, onAuthStateChange will also fire an
+  // INITIAL_SESSION event covering the same scenario. The explicit
+  // getCurrentUser() call below acts as an immediate, synchronous-feeling
+  // paint for the signed-in state without waiting for the async listener
+  // callback, and is the safe no-op when config uses placeholders (since
+  // onAuthStateChange also fires 'INITIAL_SESSION'+null via queueMicrotask
+  // in that case, which would call showSignedOutState() — matching state).
+  try {
+    const user = await auth.getCurrentUser();
+    if (user) {
+      // Existing authenticated session: restore signed-in UI.
+      state.currentUser = user;
+      showSignedInState(user.email);
+    }
+    // No user → keep state.currentUser = null (already the default).
+    return state.currentUser;
+  } catch (err) {
+    // Fail safely: an unexpected error from getCurrentUser() must not crash
+    // the application. Keep the signed-out state and log a warning.
+    console.warn('auth: session detection failed — continuing signed out.', err);
+    state.currentUser = null;
+    return null;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Finance application initialization guard (task 15.8)
+ *
+ * Prevents storage init, event wiring, and rendering from executing more than
+ * once. The flag is checked in initializeFinanceApplication() so repeated calls
+ * from the auth-state callback (e.g., TOKEN_REFRESHED events) are no-ops.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * True once initializeFinanceApplication() has run successfully.
+ * Ensures all finance wiring + storage init happen exactly once per session.
+ * @type {boolean}
+ */
+let financeAppInitialized = false;
+
+/**
+ * Show the protected finance app (app-main).
+ * @returns {void}
+ */
+function showProtectedApp() {
+  const appMain = document.getElementById('app-main');
+  if (appMain) appMain.hidden = false;
+}
+
+/**
+ * Hide the protected finance app (app-main).
+ * Called before auth resolves to prevent flash of unauthenticated finance data,
+ * and on sign-out to remove finance data from the DOM.
+ * @returns {void}
+ */
+function hideProtectedApp() {
+  const appMain = document.getElementById('app-main');
+  if (appMain) appMain.hidden = true;
+}
+
+/**
+ * Initialize all finance-specific application state: storage, event wiring,
+ * category list, currency selector, and initial render.
+ *
+ * Guarded by `financeAppInitialized` so it is safe to call multiple times â€”
+ * only the first call does real work (Req 10.4, 18.5).
+ * @returns {void}
+ */
+function initializeFinanceApplication() {
+  if (financeAppInitialized) return;
+  financeAppInitialized = true;
+
   // Ensure a valid persisted schema exists before any read/write (Req 10.4).
   storage.initializeData();
 
@@ -1627,12 +2089,6 @@ function bootstrap() {
   // persisted currency on first paint (Req 18.5).
   wireCurrencySelector();
 
-  // Registration form (task 15.3, Req 19.1).
-  wireRegisterForm();
-
-  // Login form (task 15.4, Req 19.2).
-  wireLoginForm();
-
   // Initial paint of every current view for the persisted state: the Dashboard
   // (totals, count, Selected_Month, recent transactions â€” task 4.1,
   // Req 1.1/1.2/1.4/1.5/1.8) and the Transaction_List (Req 3.1). renderAll is
@@ -1640,8 +2096,55 @@ function bootstrap() {
   renderAll();
 
   console.info(
-    "Personal Finance Tracker: module graph loaded, app ready.",
+    "Personal Finance Tracker: finance application initialized.",
     { selectedMonth: state.selectedMonth }
+  );
+}
+
+/**
+ * Bootstrap the app on load (task 15.8 â€” protected bootstrap / auth guard).
+ *
+ * Wires auth UI first, hides the protected finance app, then awaits auth
+ * resolution before deciding whether to initialize the finance application.
+ * This prevents any flash of finance data before the auth state is known.
+ *
+ * Flow:
+ *   1. Wire auth forms (always available regardless of auth state).
+ *   2. Hide app-main to prevent flash of unauthenticated finance content.
+ *   3. Await initAuthSession() â€” registers the auth-state listener AND
+ *      returns the current user (or null).
+ *   4. If user: show protected app and initialize finance application.
+ *   5. If no user: keep app-main hidden; auth UI remains accessible.
+ *
+ * @returns {Promise<void>}
+ */
+async function bootstrap() {
+  // Wire all auth UI first â€” these work regardless of auth state.
+  wireRegisterForm();
+  wireLoginForm();
+  wireLogoutButton();
+  wireResetPasswordForm();
+
+  // Hide the protected app during auth resolution to prevent flash of finance data.
+  hideProtectedApp();
+
+  // Resolve authentication state. initAuthSession() registers the auth-state
+  // listener AND returns the current user (or null). Must complete before
+  // deciding whether to initialize the finance app.
+  const user = await initAuthSession();
+
+  if (user) {
+    showSignedInState(user.email);
+    showProtectedApp();
+    initializeFinanceApplication();
+  } else {
+    showSignedOutState();
+    // hideProtectedApp() already called above; auth UI is already available.
+  }
+
+  console.info(
+    "Personal Finance Tracker: module graph loaded, app ready.",
+    { authenticated: !!user }
   );
 }
 

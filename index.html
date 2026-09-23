@@ -23,6 +23,7 @@
       <button type="button" id="show-login-button" class="btn-secondary btn-sm">Sign in</button>
       <span class="auth-signed-in" id="auth-signed-in" hidden aria-live="polite">
         <span class="auth-signed-in__email" id="auth-signed-in-email"></span>
+        <button type="button" id="logout-button" class="btn-logout" aria-label="Log out">Log out</button>
       </span>
     </nav>
   </header>
@@ -109,6 +110,39 @@
         <button type="button" id="login-back-button" class="btn-link">← Back to app</button>
         &nbsp;·&nbsp;
         <button type="button" id="login-to-register-button" class="btn-link">Create account</button>
+        &nbsp;·&nbsp;
+        <button type="button" id="login-forgot-password-button" class="btn-link">Forgot password?</button>
+      </p>
+    </div>
+  </section>
+
+  <!-- Password reset section: sibling of <main>, shown/hidden by JS (Task 15.6) -->
+  <section class="auth-section" id="reset-password-section" aria-labelledby="reset-password-heading" hidden>
+    <div class="auth-card">
+      <h2 class="auth-card__heading" id="reset-password-heading">Reset your password</h2>
+      <p class="auth-card__description">Enter your email address and we will send you a link to reset your password.</p>
+      <form class="auth-form" id="reset-password-form" novalidate>
+        <!-- email field -->
+        <div class="form-field">
+          <label for="reset-email">Email address</label>
+          <input type="email" id="reset-email" name="email" autocomplete="email"
+                 inputmode="email" aria-describedby="reset-email-error" required>
+          <span class="field-error" id="reset-email-error" data-field-error="email"
+                role="alert" aria-live="polite"></span>
+        </div>
+        <!-- form-level message -->
+        <p class="form-error" id="reset-password-form-error" role="alert" aria-live="polite"></p>
+        <!-- submit -->
+        <div class="form-actions">
+          <button type="submit" id="reset-password-submit-button">Send reset email</button>
+        </div>
+      </form>
+      <!-- success state (hidden until request succeeds) -->
+      <div class="auth-success" id="reset-password-success" hidden>
+        <p class="auth-success__message" id="reset-password-success-message"></p>
+      </div>
+      <p class="auth-card__footer">
+        <button type="button" id="reset-password-back-button" class="btn-link">&#8592; Back to sign in</button>
       </p>
     </div>
   </section>

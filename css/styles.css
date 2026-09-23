@@ -1149,6 +1149,16 @@ body {
 }
 
 /*
+ * .auth-card__description — short instructional paragraph below the heading
+ * in auth cards that need extra context (e.g. password reset).
+ */
+.auth-card__description {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-md);
+}
+
+/*
  * .btn-sm — compact button variant for header navigation actions.
  */
 .btn-sm {
@@ -1200,4 +1210,36 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * .btn-logout — small destructive button inside the #auth-signed-in badge.
+ * Matches the visual style of .transaction-row__delete (same token set).
+ * Only visible when the user is signed in (parent span is hidden otherwise).
+ */
+.btn-logout {
+  padding: var(--space-2xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-sm);
+  border: var(--border-width) solid var(--color-expense);
+  background: transparent;
+  color: var(--color-expense);
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: var(--space-xs);
+  min-height: 36px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-logout:hover {
+  background-color: var(--color-expense);
+  color: #fff;
+}
+
+.btn-logout:focus-visible {
+  background-color: var(--color-expense);
+  color: #fff;
+  outline: 2px solid var(--color-expense);
+  outline-offset: 2px;
 }

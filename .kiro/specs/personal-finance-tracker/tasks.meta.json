@@ -561,6 +561,18 @@
         "chatSessionId": "sess_6840f4e7-3cf9-4f8c-97b1-9936e2089281",
         "timestamp": 1790138826608
       }
+    ],
+    "15.5 Logout": [
+      {
+        "executionId": "830d76ff-6ef4-433b-a20f-2c6df2615631",
+        "chatSessionId": "sess_f7803983-0d60-4f58-915a-fcd4849f6659",
+        "timestamp": 1790148419075
+      },
+      {
+        "executionId": "830d76ff-6ef4-433b-a20f-2c6df2615631",
+        "chatSessionId": "sess_f7803983-0d60-4f58-915a-fcd4849f6659",
+        "timestamp": 1790148579194
+      }
     ]
   }
 }
