@@ -28,80 +28,17 @@
  *   - The user's immutable Supabase UID (user.id) is the future ownership key.
  *     Email address is never used as a data-ownership identifier.
  *
- * Layer: Authentication service. Imports only config.js. Does not import
- * storage.js, transactions.js, categories.js, dashboard.js, or any UI module.
- * app.js will import this module starting in Task 15.8; until then it exists
- * independently and does not affect the current application bootstrap.
+ * Supabase client: obtained via `getSupabaseClient()` from supabase.js, which
+ * owns the singleton lifecycle. This module never instantiates its own client,
+ * ensuring a single shared instance across auth and future storage layers.
  *
- * CDN integration: supabase-js is loaded as an ES module from the official
- * jsDelivr CDN (https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm).
- * No npm, no build step, no bundler required.
+ * Layer: Authentication service. Imports config.js and supabase.js only.
+ * Does not import storage.js, transactions.js, categories.js, dashboard.js,
+ * or any UI module. app.js imports this module starting in Task 15.8.
  */
 
 import { SUPABASE_CONFIG } from './config.js';
-
-// ---------------------------------------------------------------------------
-// Supabase client initialisation
-// ---------------------------------------------------------------------------
-
-/**
- * The official supabase-js ESM CDN entry point.
- * Using cdn.jsdelivr.net as confirmed by the official supabase-js README:
- * https://github.com/supabase/supabase-js/blob/master/packages/core/supabase-js/README.md
- *
- * Pinned to the v2 major version tag so we always receive the latest v2
- * patch without accidentally pulling in a v3 breaking change.
- * @type {string}
- */
-const SUPABASE_CDN_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-
-/**
- * Lazily-resolved Supabase client instance.
- * Null until _getClient() is first called.
- * @type {import('@supabase/supabase-js').SupabaseClient | null}
- */
-let _client = null;
-
-/**
- * Resolve and return the Supabase client singleton.
- *
- * Lazy initialisation: the CDN module is imported on the first call so
- * the application can load and render normally even when config.js still
- * contains placeholders — as long as no auth function is actually invoked.
- *
- * If `SUPABASE_CONFIG.url` or `SUPABASE_CONFIG.anonKey` are still set to
- * their placeholder strings, this function returns null and the calling
- * auth function returns a normalized configuration error. This ensures the
- * finance application does not crash on first load when configuration has
- * not yet been filled in.
- *
- * @returns {Promise<import('@supabase/supabase-js').SupabaseClient | null>}
- */
-async function _getClient() {
-  if (_client !== null) {
-    return _client;
-  }
-
-  // Guard: refuse to create a client with unconfigured placeholders.
-  if (
-    !SUPABASE_CONFIG.url ||
-    !SUPABASE_CONFIG.anonKey ||
-    SUPABASE_CONFIG.url === 'YOUR_SUPABASE_PROJECT_URL' ||
-    SUPABASE_CONFIG.anonKey === 'YOUR_SUPABASE_ANON_KEY'
-  ) {
-    return null;
-  }
-
-  try {
-    const { createClient } = await import(SUPABASE_CDN_URL);
-    _client = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
-    return _client;
-  } catch (err) {
-    // CDN load failure (offline, CSP block, etc.)
-    console.error('auth.js: failed to load supabase-js from CDN.', err);
-    return null;
-  }
-}
+import { getSupabaseClient } from './supabase.js';
 
 // ---------------------------------------------------------------------------
 // Error normalisation
@@ -212,7 +149,7 @@ export async function signUp(email, password) {
     return { ok: false, error: { code: 'weak-password', message: 'Password is required.' } };
   }
 
-  const client = await _getClient();
+  const client = await getSupabaseClient();
   if (!client) return _configError();
 
   const { data, error } = await client.auth.signUp({ email: email.trim(), password });
@@ -257,7 +194,7 @@ export async function signIn(email, password) {
     return { ok: false, error: { code: 'weak-password', message: 'Password is required.' } };
   }
 
-  const client = await _getClient();
+  const client = await getSupabaseClient();
   if (!client) return _configError();
 
   const { data, error } = await client.auth.signInWithPassword({
@@ -285,7 +222,7 @@ export async function signIn(email, password) {
  * @returns {Promise<{ ok: true } | { ok: false, error: { code: string, message: string } }>}
  */
 export async function signOut() {
-  const client = await _getClient();
+  const client = await getSupabaseClient();
   if (!client) return _configError();
 
   const { error } = await client.auth.signOut();
@@ -310,7 +247,7 @@ export async function signOut() {
  * @returns {Promise<{ id: string, email: string } | null>}
  */
 export async function getCurrentUser() {
-  const client = await _getClient();
+  const client = await getSupabaseClient();
   if (!client) return null;
 
   const { data, error } = await client.auth.getUser();
@@ -366,7 +303,7 @@ export function onAuthStateChange(callback) {
   let subscription = null;
   let cancelled = false;
 
-  _getClient().then((client) => {
+  getSupabaseClient().then((client) => {
     if (cancelled || !client) {
       if (!client) queueMicrotask(() => callback('INITIAL_SESSION', null));
       return;
@@ -414,7 +351,7 @@ export async function resetPassword(email, redirectTo) {
     return { ok: false, error: { code: 'invalid-email', message: 'Email is required.' } };
   }
 
-  const client = await _getClient();
+  const client = await getSupabaseClient();
   if (!client) return _configError();
 
   // Derive redirect URL from the current page origin when not explicitly

@@ -573,6 +573,30 @@
         "chatSessionId": "sess_f7803983-0d60-4f58-915a-fcd4849f6659",
         "timestamp": 1790148579194
       }
+    ],
+    "16.2 Row Level Security Policies": [
+      {
+        "executionId": "034d29d4-f4a0-41f1-b1d1-346e6ce071f5",
+        "chatSessionId": "sess_ccf17d9d-84e9-4c9d-9253-5855126827c7",
+        "timestamp": 1790156194829
+      },
+      {
+        "executionId": "034d29d4-f4a0-41f1-b1d1-346e6ce071f5",
+        "chatSessionId": "sess_ccf17d9d-84e9-4c9d-9253-5855126827c7",
+        "timestamp": 1790156270290
+      }
+    ],
+    "16.3 Supabase Client Module (`supabase.js`)": [
+      {
+        "executionId": "aa685e7d-350d-4401-a9aa-dc11e074a4c5",
+        "chatSessionId": "sess_0d48ee0a-febe-4e3c-8b14-16151679e871",
+        "timestamp": 1790156311645
+      },
+      {
+        "executionId": "aa685e7d-350d-4401-a9aa-dc11e074a4c5",
+        "chatSessionId": "sess_0d48ee0a-febe-4e3c-8b14-16151679e871",
+        "timestamp": 1790156501691
+      }
     ]
   }
 }
