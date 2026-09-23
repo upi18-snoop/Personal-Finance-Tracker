@@ -294,3 +294,103 @@ The App uses a configurable single-currency model. The user selects one currency
 5. WHEN the Selected_Currency changes, THE App SHALL update the displayed formatting of the Dashboard totals, the Total_Balance, the Transaction display in the Transaction_List, the Monthly_Summary, and chart tooltips and labels where currency is displayed, using the new Selected_Currency.
 6. WHEN the Selected_Currency changes, THE App SHALL NOT modify any stored numeric Transaction amount.
 7. THE App SHALL treat the Currency_Setting as a presentation-layer concern and SHALL NOT perform any exchange-rate conversion in response to a Selected_Currency change.
+
+---
+
+## Phase 15 — Authentication Extension
+
+> **Scope note:** Requirements 1–18 above describe the original v1 client-side-only scope
+> (LocalStorage, no authentication, no cloud database). Requirements 19–22 below are the
+> explicitly approved Phase 15+ extension: optional user authentication via Supabase. The
+> extended roadmap is:
+>
+> - **Phase 15 — Authentication** (Supabase Auth, email/password flows)
+> - **Phase 16 — Cloud Database** (Supabase PostgreSQL, per-user data)
+> - **Phase 17 — LocalStorage ? Cloud Migration** (controlled data migration)
+> - **Phase 18 — Security / Session Hardening**
+>
+> Phase 15 is additive. All Phase 1–14 functionality remains in place and unchanged.
+
+### Requirement 19 — Authentication
+
+The application SHALL support optional user authentication through Supabase Auth.
+
+#### 19.1 Registration
+
+Users SHALL be able to create an account using email and password.
+
+#### 19.2 Login
+
+Registered users SHALL be able to authenticate using email and password.
+
+#### 19.3 Logout
+
+Authenticated users SHALL be able to sign out.
+
+#### 19.4 Password Reset
+
+Users SHALL be able to request a password reset using their email address.
+
+#### 19.5 Session Persistence
+
+The application SHALL recognize an existing authenticated Supabase session when the application loads.
+
+#### 19.6 Authentication State
+
+The application SHALL be able to determine whether the current user is authenticated.
+
+---
+
+### Requirement 20 — User Identity and Data Isolation
+
+Future cloud-stored financial data SHALL be associated with the authenticated user's immutable
+Supabase user ID (`user.id`).
+
+The application SHALL NOT use email addresses as the permanent ownership key.
+
+Future database security policies (Row-Level Security) SHALL enforce that users can only access their
+own financial records.
+
+> **Note:** This requirement is architectural. It does not require database implementation in Phase
+> 15. It is documented here to constrain how Phase 16 must be designed.
+
+---
+
+### Requirement 21 — Local Data Migration
+
+When cloud storage is introduced (Phase 17), the application SHALL provide a controlled migration
+path for existing LocalStorage financial data.
+
+Migration SHALL:
+
+- require explicit user consent before any data is moved
+- validate local data before migration begins
+- verify successful cloud persistence before deleting local data
+- avoid accidental data loss
+- handle potential conflicts when cloud data already exists
+
+> **Note:** Migration is NOT implemented in Phase 15.
+
+---
+
+### Requirement 22 — Authentication Privacy and Security
+
+The application SHALL:
+
+- never store plaintext passwords (delegated to Supabase Auth)
+- never expose service-role credentials or database passwords in client-side code
+- never log authentication tokens
+- rely on Supabase Auth for authentication session management
+- use secure provider/database rules for future data isolation (Phase 16+)
+
+---
+
+## Requirement Coverage Matrix (Phase 15+)
+
+| Requirement | Description                        | Phase(s)    | Status         |
+|-------------|------------------------------------|-------------|----------------|
+| 1–18        | Original v1 Finance Tracker        | Phase 1–14  | Implemented    |
+| 19          | Authentication                     | Phase 15    | In progress    |
+| 20          | User Identity & Data Isolation     | Phase 16    | Not implemented |
+| 21          | Local Data Migration               | Phase 17    | Not implemented |
+| 22          | Authentication Privacy & Security  | Phase 15–18 | In progress    |

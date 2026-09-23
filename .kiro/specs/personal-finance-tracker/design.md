@@ -813,3 +813,134 @@ Designed for, **not built in v1** (Req 13, product/structure steering):
   category features.
 - The app remains **fully functional on localStorage alone**; no future feature is required for v1 to
   work.
+
+---
+
+## Phase 15 — Authentication Architecture Extension
+
+> **Scope boundary:** The design sections above describe the complete v1 architecture (LocalStorage,
+> no authentication). This section documents the Phase 15 authentication extension and the planned
+> architecture for future phases. No changes are made to the existing modules described above.
+
+### Scope Evolution
+
+| Phase      | Scope                                              | Storage backend     |
+|------------|----------------------------------------------------|---------------------|
+| Phase 1–14 | Finance tracker, no auth                          | LocalStorage only   |
+| Phase 15   | Supabase Auth (email/password)                    | LocalStorage only   |
+| Phase 16   | Cloud database (Supabase PostgreSQL)              | Supabase DB         |
+| Phase 17   | LocalStorage ? cloud migration                    | Both (transition)   |
+| Phase 18   | Security / session hardening                      | Supabase DB         |
+
+### Phase 15 — Current Authentication Architecture
+
+```
+UI (index.html — auth forms: login, register, forgot-password)
+ ?
+app.js  (bootstrap, auth-state routing, onAuthStateChange gate)
+ ?
+auth.js  (provider-neutral AuthProvider API)
+ ?
+Supabase Auth  (supabase-js from CDN, SUPABASE_CONFIG from config.js)
+```
+
+Finance data path is **unchanged** in Phase 15:
+
+```
+Finance Data
+ ?
+storage.js
+ ?
+LocalStorage
+```
+
+Authentication and finance data are **completely decoupled** in Phase 15. `auth.js` does not touch
+`storage.js`, and `storage.js` does not know about authentication.
+
+### Phase 15 — Module Additions
+
+| Module        | Layer          | Responsibility                                                                 |
+|---------------|----------------|--------------------------------------------------------------------------------|
+| `js/config.js` | Configuration | Exports `SUPABASE_CONFIG = { url, anonKey }` — the only place public Supabase credentials live. No private credentials. |
+| `js/auth.js`  | Auth service   | Provider-neutral AuthProvider API: `signUp`, `signIn`, `signOut`, `getCurrentUser`, `onAuthStateChange`, `resetPassword`. Normalizes Supabase error codes. |
+
+### Phase 15 — AuthProvider API
+
+```js
+// Normalized result shape for all auth operations:
+// { ok: boolean, user?: { id, email }, error?: NormalizedErrorCode }
+
+// NormalizedErrorCode values:
+// "invalid-credentials" | "email-in-use" | "weak-password" |
+// "user-not-found" | "network-error" | "unknown"
+
+signUp(email, password):           Promise<AuthResult>
+signIn(email, password):           Promise<AuthResult>
+signOut():                         Promise<AuthResult>
+getCurrentUser():                  Promise<{ id, email } | null>
+onAuthStateChange(callback):       void   // callback({ user } | { user: null })
+resetPassword(email):              Promise<AuthResult>
+```
+
+### Phase 15 — App Bootstrap with Auth Gate
+
+```js
+// app.js bootstrap (Phase 15+):
+async function bootstrap() {
+  auth.onAuthStateChange(({ user }) => {
+    if (!user) {
+      showAuthUI();          // display login form; hide finance dashboard
+    } else {
+      state.currentUser = { id: user.id, email: user.email };
+      storage.initializeData();
+      state.selectedCurrency = storage.getCurrency();
+      wireEventHandlers();
+      renderAll();           // finance dashboard rendered only for authenticated users
+    }
+  });
+}
+```
+
+The finance dashboard HTML sections are hidden by default and revealed only after auth confirmation,
+preventing any flash of financial data to unauthenticated users (Req 19.6).
+
+### Future Phase 16 — Cloud Database Architecture (planned, not built)
+
+```
+Finance Data
+ ?
+StorageProvider  (existing abstraction seam in storage.js)
+ ?
+SupabaseDatabaseProvider  (Phase 16 — new implementation of StorageProvider)
+ ?
+Supabase PostgreSQL
+```
+
+The existing `StorageProvider` seam in `storage.js` (currently wiring `LocalStorageProvider`) is the
+exact extension point for Phase 16. No changes to business logic or UI modules are required.
+
+### Future Authentication Identity Flow (Phase 16+)
+
+```
+Supabase Auth
+      ?
+authenticated user.id  (immutable; never the email address — Req 20)
+      ?
+future user_id column on financial records
+      ?
+Row-Level Security (RLS) policies
+      ?
+user-owned financial records in PostgreSQL
+```
+
+User identity is always the immutable `user.id` from Supabase Auth, not the email address (Req 20).
+Email may change; `user.id` never does. This constraint applies to Phase 16 table design.
+
+### Phase 15 Security Constraints (Req 22)
+
+- `config.js` exports only the **public anon key** (`anon` role); the service-role key is never in
+  client-side code.
+- No database passwords or service credentials in any committed file.
+- Authentication tokens (JWTs) are managed by `supabase-js` and never logged.
+- Plaintext passwords are never stored; Supabase Auth handles all password hashing.
+- `auth.js` uses `safeText` / `textContent` for all user-facing error messages (no `innerHTML`).

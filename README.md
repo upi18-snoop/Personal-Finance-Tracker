@@ -972,3 +972,68 @@ The following table maps each design correctness property to the code evidence c
 - Req 18.1–18.3, 18.5: No Settings/currency selector UI; no `getCurrency()`/`setCurrency()` accessors; no `state.selectedCurrency`. All pending Phase 14 tasks (14.1–14.4).
 
 **No core v1 functional requirement is unimplemented or broken.** All 72 manual test cases evaluated in the test groups above pass. All 16 correctness properties that apply to v1 hold except for the Phase 14 locale parameterization (P14), which does not affect current functionality since IDR is the only displayed currency in v1.
+
+
+---
+
+## Supabase Setup (Required Before Phase 15.2)
+
+> **Phase 15.1 configuration note.**
+> The authentication features planned for Phase 15 require a free [Supabase](https://supabase.com) project.
+> The application currently works entirely with LocalStorage and does **not** require Supabase to run.
+> Complete this setup before starting task 15.2.
+
+### Steps
+
+1. **Create a Supabase project**
+   Go to [https://supabase.com](https://supabase.com), sign in, and create a new project.
+   Choose a region close to your users.
+
+2. **Find your public project credentials**
+   In the Supabase dashboard, go to **Project Settings → API**.
+   You need two values:
+   - **Project URL** — looks like `https://<project-ref>.supabase.co`
+   - **anon / public key** — a long JWT string listed under *Project API Keys*
+
+3. **Update `js/config.js`**
+   Open `js/config.js` in the repository and replace the placeholder strings:
+   ```js
+   export const SUPABASE_CONFIG = {
+     url: 'https://<your-project-ref>.supabase.co',   // ← your Project URL
+     anonKey: 'eyJ...',                                // ← your anon/public key
+   };
+   ```
+   Both values are **safe to commit** to a public repository.
+
+4. **Enable Email authentication**
+   In the Supabase dashboard, go to **Authentication → Providers**.
+   Confirm that **Email** is enabled (it is on by default).
+
+5. **Configure your Site URL and Redirect URLs**
+   In **Authentication → URL Configuration**, set:
+   - **Site URL**: `https://<your-username>.github.io/<repository-name>`
+   - **Redirect URLs**: add the same GitHub Pages URL
+     (required for password-reset email links to return to your deployed app)
+
+   If you are testing locally, also add `http://localhost:8080` (or whichever port you use)
+   to the Redirect URLs list.
+
+6. **You are ready for Phase 15.2**
+   Once the above is done, implement `js/auth.js` per task 15.2.
+
+### Security Rules — What Must NEVER Be Committed
+
+| Credential | Where to find it | Commit to repo? |
+|---|---|---|
+| Project URL | Project Settings → API | ✅ Safe — public identifier |
+| anon / public key | Project Settings → API → Project API Keys | ✅ Safe — publishable key |
+| service_role key | Project Settings → API → Project API Keys | ❌ NEVER — bypasses all security |
+| Database password | Project Settings → Database | ❌ NEVER |
+| JWT secret | Project Settings → API | ❌ NEVER |
+| SMTP password (if custom) | Authentication → SMTP Settings | ❌ NEVER |
+
+> The `service_role` key bypasses all Row Level Security policies.
+> It must never appear in any client-side file, never be committed to GitHub,
+> and never be transmitted to any browser.
+> Use it only in server-side scripts that you run locally or in a secured CI environment.
+

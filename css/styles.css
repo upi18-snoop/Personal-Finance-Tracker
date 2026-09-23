@@ -1038,3 +1038,138 @@ body {
     max-width: 24rem;
   }
 }
+
+/* ==========================================================================
+   Authentication UI — Task 15.3 (Registration)
+   ========================================================================== */
+
+/*
+ * .auth-section — full-width page-level section that contains the auth card.
+ * Positioned as a sibling of <main> so it can replace the finance dashboard
+ * view entirely when shown. Centers the card vertically and horizontally.
+ */
+.auth-section {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: var(--space-xl) var(--space-md);
+  min-height: 60vh;
+  width: 100%;
+}
+
+/*
+ * .auth-card — the centered form container card.
+ * Matches the surface/border/shadow pattern of existing .section cards.
+ */
+.auth-card {
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-xl) var(--space-lg);
+  width: 100%;
+  max-width: 26rem;
+}
+
+.auth-card__heading {
+  font-size: var(--font-size-xl);
+  margin-bottom: var(--space-lg);
+  text-align: center;
+}
+
+/*
+ * .auth-form — stacked form fields, consistent with .transaction-form
+ * single-column layout.
+ */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* Auth form submit button fills the card width on all sizes. */
+.auth-form .form-actions button {
+  width: 100%;
+}
+
+/*
+ * Loading / disabled state for the submit button while the async
+ * auth call is in flight.
+ */
+.auth-form button[disabled] {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/*
+ * .auth-success — shown in place of (or below) the form on successful
+ * registration, conveying the next step to the user.
+ */
+.auth-success {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background-color: #e8f5e9;
+  border: 1px solid #a5d6a7;
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.auth-success__message {
+  color: #1b5e20;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
+}
+
+/*
+ * .auth-card__footer — small text link area below the form card
+ * (e.g. "Back to app", future "Already have an account? Sign in").
+ */
+.auth-card__footer {
+  margin-top: var(--space-md);
+  text-align: center;
+}
+
+/*
+ * .btn-link — a button that looks like a text link.
+ * Used for low-emphasis navigation actions inside auth cards.
+ */
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  min-height: auto;
+  padding: 0;
+}
+
+.btn-link:hover {
+  color: var(--color-primary-hover);
+}
+
+/*
+ * .btn-sm — compact button variant for header navigation actions.
+ */
+.btn-sm {
+  min-height: 36px;
+  padding: var(--space-2xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+}
+
+/*
+ * Header nav — aligns the "Create account" button to the right of the title.
+ */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.app-header__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}

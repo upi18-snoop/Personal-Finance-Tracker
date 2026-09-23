@@ -21,6 +21,7 @@ import * as dashboard from "./dashboard.js";
 import * as reports from "./reports.js";
 import * as charts from "./charts.js";
 import * as utils from "./utils.js";
+import * as auth from "./auth.js";
 const { getMonthKey } = utils;
 
 /**
@@ -1008,6 +1009,280 @@ function wireCategoryForm() {
   });
 }
 
+/* --------------------------------------------------------------------------
+ * Registration (task 15.3)
+ *
+ * Self-contained registration form handler. Does NOT modify the bootstrap,
+ * renderAll, or any existing finance functionality. The registration section
+ * (#register-section) is shown/hidden independently of the finance dashboard.
+ * Task 15.8 will add the full authentication guard; this task only handles
+ * the registration form interaction.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Show the registration section and hide the finance dashboard main content.
+ * @returns {void}
+ */
+function showRegisterView() {
+  const registerSection = document.getElementById("register-section");
+  const appMain = document.getElementById("app-main");
+  if (registerSection) registerSection.hidden = false;
+  if (appMain) appMain.hidden = true;
+}
+
+/**
+ * Hide the registration section and restore the finance dashboard.
+ * @returns {void}
+ */
+function hideRegisterView() {
+  const registerSection = document.getElementById("register-section");
+  const appMain = document.getElementById("app-main");
+  if (registerSection) registerSection.hidden = true;
+  if (appMain) appMain.hidden = false;
+  // Clear any stale form state when returning to the app.
+  resetRegisterForm();
+}
+
+/**
+ * Reset the registration form to its empty default state.
+ * Clears all field values, validation messages, and the success block.
+ * @returns {void}
+ */
+function resetRegisterForm() {
+  const form = document.getElementById("register-form");
+  if (form) form.reset();
+  clearRegisterErrors();
+  const successEl = document.getElementById("register-success");
+  if (successEl) successEl.hidden = true;
+  const submitBtn = document.getElementById("register-submit-button");
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    utils.safeText(submitBtn, "Create account");
+  }
+}
+
+/**
+ * Clear all inline validation messages on the registration form.
+ * @returns {void}
+ */
+function clearRegisterErrors() {
+  const form = document.getElementById("register-form");
+  if (!form) return;
+  for (const el of form.querySelectorAll("[data-field-error]")) {
+    utils.safeText(el, "");
+  }
+  utils.safeText(document.getElementById("register-form-error"), "");
+}
+
+/**
+ * Validate registration form input.
+ * Returns an array of { field, message } errors. Empty array means valid.
+ *
+ * Rules:
+ *   - email: required, must contain '@' and '.' after '@'
+ *   - password: required, minimum 6 characters (Supabase default minimum)
+ *   - confirmPassword: required, must match password
+ *
+ * @param {{ email: string, password: string, confirmPassword: string }} values
+ * @returns {{ field: string, message: string }[]}
+ */
+function validateRegisterForm(values) {
+  const errors = [];
+
+  // Email validation
+  if (!values.email || values.email.trim() === "") {
+    errors.push({ field: "email", message: "Email address is required." });
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) {
+    errors.push({ field: "email", message: "Please enter a valid email address." });
+  }
+
+  // Password validation — Supabase default minimum is 6 characters
+  if (!values.password || values.password.length === 0) {
+    errors.push({ field: "password", message: "Password is required." });
+  } else if (values.password.length < 6) {
+    errors.push({ field: "password", message: "Password must be at least 6 characters." });
+  }
+
+  // Confirm password
+  if (!values.confirmPassword || values.confirmPassword.length === 0) {
+    errors.push({ field: "confirmPassword", message: "Please confirm your password." });
+  } else if (values.password !== values.confirmPassword) {
+    errors.push({ field: "confirmPassword", message: "Passwords do not match." });
+  }
+
+  return errors;
+}
+
+/**
+ * Display inline validation errors on the registration form.
+ * Unrecognized field names fall through to the form-level error element.
+ * @param {{ field: string, message: string }[]} errors
+ * @returns {void}
+ */
+function showRegisterErrors(errors) {
+  clearRegisterErrors();
+  const form = document.getElementById("register-form");
+  if (!form) return;
+  const unassigned = [];
+  for (const error of errors) {
+    const slot = form.querySelector(`[data-field-error="${error.field}"]`);
+    if (slot) {
+      utils.safeText(slot, error.message);
+    } else {
+      unassigned.push(error.message);
+    }
+  }
+  if (unassigned.length > 0) {
+    utils.safeText(
+      document.getElementById("register-form-error"),
+      unassigned.join(" ")
+    );
+  }
+}
+
+/**
+ * Show the success state after a successful registration.
+ * Hides the form submit button and displays the result message.
+ * @param {string} message
+ * @returns {void}
+ */
+function showRegisterSuccess(message) {
+  const successEl = document.getElementById("register-success");
+  const successMsg = document.getElementById("register-success-message");
+  if (successMsg) utils.safeText(successMsg, message);
+  if (successEl) successEl.hidden = false;
+}
+
+/**
+ * Handle registration form submission (task 15.3).
+ *
+ * Flow:
+ *   1. Read form values.
+ *   2. Run client-side validation.
+ *   3. If invalid: show inline errors, do not call auth.signUp().
+ *   4. If valid: disable button, show loading state, call auth.signUp().
+ *   5. On success: show appropriate success message (session available or
+ *      email confirmation required).
+ *   6. On error: show normalized error message, re-enable button.
+ *
+ * Passwords are NEVER logged, stored, or returned to callers.
+ *
+ * @param {Event} event
+ * @returns {void}
+ */
+function onRegisterSubmit(event) {
+  event.preventDefault();
+
+  const form = document.getElementById("register-form");
+  if (!form) return;
+
+  const emailEl = document.getElementById("register-email");
+  const passwordEl = document.getElementById("register-password");
+  const confirmEl = document.getElementById("register-confirm-password");
+  const submitBtn = document.getElementById("register-submit-button");
+
+  const values = {
+    email: emailEl ? emailEl.value : "",
+    password: passwordEl ? passwordEl.value : "",
+    confirmPassword: confirmEl ? confirmEl.value : "",
+  };
+
+  // 1. Client-side validation — do not call Supabase with bad input.
+  const validationErrors = validateRegisterForm(values);
+  if (validationErrors.length > 0) {
+    showRegisterErrors(validationErrors);
+    return;
+  }
+
+  // 2. Clear previous errors and enter loading state.
+  clearRegisterErrors();
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    utils.safeText(submitBtn, "Creating account\u2026");
+  }
+
+  // 3. Delegate to auth.js — the only layer that knows about Supabase.
+  //    Use a void-returning async IIFE so we don't need to make the handler async.
+  (async () => {
+    const result = await auth.signUp(values.email, values.password);
+
+    if (result.ok) {
+      // Case A: session returned immediately (email confirmation disabled in project).
+      showRegisterSuccess(
+        "Account created successfully! You can now sign in."
+      );
+      return;
+    }
+
+    // Case B: email confirmation required — auth.js returns email-not-confirmed
+    // when Supabase creates the account but does not return a session yet.
+    if (result.error && result.error.code === "email-not-confirmed") {
+      showRegisterSuccess(
+        "Almost there! We\u2019ve sent a confirmation email to " +
+        values.email.trim() +
+        ". Please check your inbox and click the link to activate your account, then come back to sign in."
+      );
+      return;
+    }
+
+    // Case C: provider error — show normalized message, re-enable button.
+    const errorMessage = getRegisterErrorMessage(result.error);
+    utils.safeText(document.getElementById("register-form-error"), errorMessage);
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      utils.safeText(submitBtn, "Create account");
+    }
+  })();
+}
+
+/**
+ * Map a normalized auth error to a user-friendly registration message.
+ * Passwords are never included in error messages.
+ * @param {{ code: string, message: string } | undefined} error
+ * @returns {string}
+ */
+function getRegisterErrorMessage(error) {
+  if (!error) return "Registration failed. Please try again.";
+  switch (error.code) {
+    case "email-in-use":
+      return "An account with this email address already exists. Try signing in instead.";
+    case "invalid-email":
+      return "Please enter a valid email address.";
+    case "weak-password":
+      return "Password must be at least 6 characters.";
+    case "rate-limited":
+      return "Too many attempts. Please wait a moment and try again.";
+    case "network-error":
+      return "Network error. Please check your connection and try again.";
+    case "not-configured":
+      return "Authentication is not configured yet. Please add your Supabase credentials to js/config.js.";
+    default:
+      return "Registration failed. Please try again.";
+  }
+}
+
+/**
+ * Wire the registration form and navigation buttons (task 15.3).
+ * Attaches to #register-form, #show-register-button, #register-back-button.
+ * @returns {void}
+ */
+function wireRegisterForm() {
+  const form = document.getElementById("register-form");
+  if (form) {
+    form.addEventListener("submit", onRegisterSubmit);
+  }
+
+  const showBtn = document.getElementById("show-register-button");
+  if (showBtn) {
+    showBtn.addEventListener("click", showRegisterView);
+  }
+
+  const backBtn = document.getElementById("register-back-button");
+  if (backBtn) {
+    backBtn.addEventListener("click", hideRegisterView);
+  }
+}
+
 /**
  * Bootstrap the app on load. Initializes storage, then wires the UI event
  * handlers implemented so far (task 3.3 wires the add-transaction form). Render
@@ -1052,6 +1327,9 @@ function bootstrap() {
   // called after state.selectedCurrency is seeded so the selector reflects the
   // persisted currency on first paint (Req 18.5).
   wireCurrencySelector();
+
+  // Registration form (task 15.3, Req 19.1).
+  wireRegisterForm();
 
   // Initial paint of every current view for the persisted state: the Dashboard
   // (totals, count, Selected_Month, recent transactions — task 4.1,
