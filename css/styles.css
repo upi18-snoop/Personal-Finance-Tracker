@@ -409,6 +409,10 @@ button:hover {
   margin-top: var(--space-md);
 }
 
+/* On mobile the two chart containers stack; the spacing between them is handled
+   by the .chart-container + .chart-container rule below. On tablet/desktop the
+   containers move into a .chart-row grid (task 9.2) and the grid gap takes over,
+   so the margin-top on siblings is reset inside that context. */
 .chart-container + .chart-container {
   margin-top: var(--space-lg);
 }
@@ -427,6 +431,34 @@ button:hover {
 .selected-month-label {
   margin-top: var(--space-xs);
   font-weight: var(--font-weight-medium);
+}
+
+/* ==========================================================================
+   Global empty state (task 10.3) — Req 11.1, 11.3
+   ========================================================================== */
+
+/*
+ * Shown when no transactions exist (Req 11.1); hidden by renderGlobalEmptyState
+ * once the first transaction is added (Req 11.3). Centers the message inside
+ * the card with generous vertical padding so the call-to-action is prominent on
+ * both mobile and desktop.
+ */
+.global-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-xl) var(--space-md);
+  /* Slightly softer border to keep the card present but understated. */
+  border-style: dashed;
+}
+
+.global-empty-state__message {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-lg);
+  max-width: 28rem;
+  line-height: var(--line-height-base);
 }
 
 /* ==========================================================================
@@ -826,4 +858,183 @@ body {
 
 .category-list__group-heading:first-child {
   margin-top: 0;
+}
+
+/* ==========================================================================
+   Responsive breakpoints — tablet (≥600px) and desktop (≥1024px)
+   Task 9.2 — Req 12.1
+   Mobile-first: these rules ADD multi-column layout on top of the single-
+   column base. Nothing from the base layer is removed or overridden in a
+   way that would break the mobile layout.
+   ========================================================================== */
+
+/*
+ * .chart-row — base (mobile): single-column stack, consistent with all other
+ * section content. The breakpoint rules below switch it to a 2-column grid.
+ * Keeping this outside the media query ensures the class is always defined
+ * and the mobile layout is never reliant on the breakpoint.
+ */
+.chart-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  /* Reset the individual chart-container margin-top inside this flex container
+     since the gap property handles spacing between siblings. */
+}
+
+/* Inside .chart-row the individual chart-container margin-top is redundant;
+   the flex/grid gap handles spacing. Reset it here to avoid double-spacing. */
+.chart-row .chart-container {
+  margin-top: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Tablet — ≥600px
+   --------------------------------------------------------------------------
+   - Container widens to use more of the available viewport.
+   - Balance/overview cards switch to a 2-up auto-fit grid.
+   - Transaction-form fields pair up into a 2-column grid so the form is more
+     compact and readable on medium screens.
+   - Filter controls also go to 2-column so multiple controls sit side by side.
+   - Charts sit side-by-side in a 2-column grid (expense left, income right).
+   -------------------------------------------------------------------------- */
+@media (min-width: 600px) {
+  /* Widen the shared container so content breathes on wider viewports. */
+  .app-header,
+  .app-main,
+  .app-footer {
+    max-width: 56rem; /* ~896px — keeps content readable but wider than mobile */
+  }
+
+  /* Balance cards: 2-column auto-fit grid so cards sit side by side. */
+  .balance-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: var(--space-sm);
+  }
+
+  /* Transaction form: 2-column grid for field pairs. The submit button and
+     any form-level error span the full width to stay prominent. */
+  .transaction-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+    align-items: start;
+  }
+
+  .transaction-form .form-actions,
+  .transaction-form #transaction-form-error {
+    grid-column: 1 / -1; /* full width */
+  }
+
+  /* Filter controls: 2-column grid so pairs of filters sit side by side. */
+  .filter-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-sm);
+    align-items: end;
+  }
+
+  .filter-controls .form-actions {
+    grid-column: 1 / -1; /* Clear button spans full row */
+  }
+
+  /* Charts section: two charts side by side. Each chart container stays
+     within its half of the row. */
+  .charts-section {
+    display: block; /* section is still a block card */
+  }
+
+  .charts-section > h2 {
+    /* section heading sits above the two-chart row */
+    grid-column: 1 / -1;
+  }
+
+  .chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+    align-items: start;
+    margin-top: var(--space-md);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Desktop — ≥1024px
+   --------------------------------------------------------------------------
+   - Container widens further for a comfortable desktop reading width.
+   - Balance cards go to 4-column so all four sit on one row.
+   - Transaction form: keep 2-column but loosen the gap.
+   - Filter controls: 4 across so all four controls sit on one row.
+   -------------------------------------------------------------------------- */
+@media (min-width: 1024px) {
+  /* Wider container for desktop — still capped to avoid overly long lines. */
+  .app-header,
+  .app-main,
+  .app-footer {
+    max-width: 72rem; /* ~1152px */
+  }
+
+  /* 4-column overview cards on desktop so all four sit on one row. */
+  .balance-cards {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  /* Transaction form: 3-column on desktop — type + name + amount in a row,
+     then category + date + (empty) on the next. The submit button still spans
+     the full width. */
+  .transaction-form {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  /* All four filter controls on one row. */
+  .filter-controls {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    align-items: end;
+  }
+
+  .filter-controls .form-actions {
+    grid-column: auto; /* release from full-span; sits in column 5 naturally */
+    align-self: end;
+  }
+}
+
+/* ==========================================================================
+   Settings section (task 14.3) — Req 18.1, 18.5, 18.6
+   ========================================================================== */
+
+/*
+ * The settings form is a single-column form, consistent with the category
+ * and transaction forms. The currency <select> uses the shared .form-field
+ * and button styles so no extra button-specific rules are needed here.
+ */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/*
+ * Hint text below the currency <select> — explains that this is a display
+ * preference that does not affect stored amounts (Req 9.3, 18.7). Styled like
+ * other secondary text in the app (muted, small) for visual consistency.
+ */
+.settings-form__hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  display: block;
+  margin-top: var(--space-2xs);
+}
+
+/* The currency select should fill its container on all screen sizes. */
+.settings-form .form-field select {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* On tablet+, the settings form matches the width behaviour of other forms. */
+@media (min-width: 600px) {
+  .settings-form {
+    max-width: 24rem;
+  }
 }

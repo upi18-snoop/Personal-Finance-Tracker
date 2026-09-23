@@ -26,6 +26,8 @@
  *     class, so a future backend swaps in with no changes above this layer.
  */
 
+import { SUPPORTED_CURRENCIES } from "./utils.js";
+
 // Storage_Schema constants (Req 10.7). STORAGE_KEY is the single localStorage
 // key the whole app uses; SCHEMA_VERSION identifies the schema shape.
 export const STORAGE_KEY = "financeTrackerData";
@@ -215,6 +217,50 @@ export function saveData(data) {
  */
 export function clearData() {
   saveData(defaultData());
+}
+
+/**
+ * Return the user's currently selected currency code (Req 9.2).
+ *
+ * Backward-compatible: data stored before currency configuration was added
+ * (no settings.currency field), invalid/missing settings, or a fresh
+ * first-run all return the default "IDR".
+ *
+ * @returns {string} ISO 4217 currency code, defaults to "IDR"
+ */
+export function getCurrency() {
+  const data = loadData();
+  const currency = data?.settings?.currency;
+  // Only return codes present in SUPPORTED_CURRENCIES; anything else → "IDR".
+  return (typeof currency === "string" && SUPPORTED_CURRENCIES[currency])
+    ? currency
+    : "IDR";
+}
+
+/**
+ * Persist the user's selected currency code (Req 9.2).
+ *
+ * Validates `currency` against SUPPORTED_CURRENCIES (the single source of
+ * truth from utils.js). Invalid or unsupported codes are silently rejected —
+ * the previously stored currency is preserved and no corruption occurs.
+ *
+ * Changing the selected currency NEVER converts or mutates stored transaction
+ * amounts (Req 9.3 — display-only concern handled by the render layer).
+ *
+ * @param {string} currency ISO 4217 currency code
+ * @returns {boolean} true if persisted, false if rejected
+ */
+export function setCurrency(currency) {
+  if (typeof currency !== "string" || !SUPPORTED_CURRENCIES[currency]) {
+    return false; // Reject unsupported/invalid codes — no mutation.
+  }
+  const data = loadData();
+  if (!data.settings || typeof data.settings !== "object") {
+    data.settings = {};
+  }
+  data.settings.currency = currency;
+  saveData(data);
+  return true;
 }
 
 /**

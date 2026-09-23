@@ -40,10 +40,13 @@ function currentMonthKey() {
  * Lightweight app state — the only mutable shared state.
  *  - selectedMonth: reporting scope (Dashboard month, Monthly_Summary, charts)
  *  - filterCriteria: list scope (drives only the Transaction_List)
+ *  - selectedCurrency: active ISO 4217 currency code for all formatted money
+ *    values; seeded from storage.getCurrency() at bootstrap (Req 18.5).
  */
 const state = {
   selectedMonth: currentMonthKey(),
   filterCriteria: { searchTerm: "", type: "all", category: "", month: "" },
+  selectedCurrency: "IDR", // overwritten in bootstrap() from storage.getCurrency()
 };
 
 /* --------------------------------------------------------------------------
@@ -234,7 +237,7 @@ function renderTransactionList() {
       ? "No transactions match your filters."
       : undefined;
 
-  dashboard.renderTransactionListRows(filtered, emptyMessage);
+  dashboard.renderTransactionListRows(filtered, emptyMessage, state.selectedCurrency);
   addDeleteControls();
 }
 
@@ -433,12 +436,14 @@ function wireFilterControls() {
 
 /**
  * Currency formatter callback passed to chart update functions so the
- * accessible text descriptions show properly formatted amounts (Req 9).
+ * accessible text descriptions show properly formatted amounts (Req 9, 9.6).
+ * Always uses the current state.selectedCurrency so chart labels stay in sync
+ * when the user changes currency (Req 18.7).
  * @param {number} amount
  * @returns {string}
  */
 function formatMoney(amount) {
-  return utils.formatCurrency(amount);
+  return utils.formatCurrency(amount, state.selectedCurrency);
 }
 
 /**
@@ -462,9 +467,9 @@ function formatMoney(amount) {
  * @returns {void}
  */
 function renderReports() {
-  // Monthly_Summary for the Selected_Month (Req 5.3–5.8). reports takes the
-  // "YYYY-MM" month key.
-  reports.renderMonthlySummary(state.selectedMonth);
+  // Monthly_Summary for the Selected_Month (Req 5.3–5.8). Pass the active
+  // Selected_Currency so all amounts are formatted consistently (Req 9.6, 18.7).
+  reports.renderMonthlySummary(state.selectedMonth, state.selectedCurrency);
 
   // Category charts for the same reporting scope (Req 6.x / 7.x).
   // Pass the formatMoney callback so chart descriptions show formatted amounts.
@@ -669,7 +674,91 @@ function wireMonthSelector() {
 }
 
 /* --------------------------------------------------------------------------
- * Category management UI (task 8.3)
+ * Currency selector — Settings section (task 14.3)
+ *
+ * The currency selector is a presentation-only control: changing it updates
+ * state.selectedCurrency, persists the choice via storage.setCurrency, and
+ * re-renders all currency-formatted surfaces without touching any stored
+ * transaction amounts (Req 18.6, 18.7).
+ *
+ * This mirrors the month-selector's reporting-scope pattern: changing the
+ * currency triggers a full re-render of every formatted view, but no data is
+ * mutated — it is purely a display preference (Req 9.3).
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Populate the currency `<select>` with one `<option>` per entry in
+ * `SUPPORTED_CURRENCIES` (Req 18.1). Each option displays the currency code
+ * and its human-readable label (e.g., "USD — US Dollar"). Option text is set
+ * via textContent (never innerHTML). The active Selected_Currency is pre-selected.
+ * @returns {void}
+ */
+function populateCurrencySelect() {
+  const selectEl = document.getElementById("currency-select");
+  if (!selectEl) return;
+
+  selectEl.replaceChildren();
+
+  for (const [code, meta] of Object.entries(utils.SUPPORTED_CURRENCIES)) {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = `${code} — ${meta.label}`;
+    selectEl.appendChild(opt);
+  }
+
+  // Reflect the persisted Selected_Currency in the control (Req 18.5).
+  selectEl.value = state.selectedCurrency;
+}
+
+/**
+ * Handle a currency change from the Settings selector (Req 18.6, 18.7).
+ *
+ * Persists the choice via storage.setCurrency (which validates the code —
+ * unknown codes are rejected silently). Updates state.selectedCurrency and
+ * triggers a full reporting-style re-render of every currency-formatted surface:
+ * dashboard totals (Total_Balance / Total_Income / Total_Expense), the
+ * Monthly_Summary, the category charts, and the Transaction_List. NO stored
+ * transaction amounts are modified — this is presentation only (Req 9.3, 18.7).
+ *
+ * The render path is identical to what happens after a month change or
+ * add/delete: renderAll() covers every formatted surface atomically so no
+ * surface is left showing the previous currency.
+ *
+ * @param {string} code ISO 4217 currency code from SUPPORTED_CURRENCIES.
+ * @returns {void}
+ */
+function onCurrencyChange(code) {
+  // Validate + persist. setCurrency rejects unknown codes (returns false); in
+  // that case we keep the current state.selectedCurrency unchanged.
+  const accepted = storage.setCurrency(code);
+  if (!accepted) return;
+
+  state.selectedCurrency = code;
+
+  // Re-render every currency-formatted surface (Req 18.7). renderAll is the
+  // single atomic re-render path used for all reporting-scope changes so it
+  // guarantees no surface is left showing the previous currency symbol.
+  renderAll();
+}
+
+/**
+ * Wire the Settings currency selector: populate its options from
+ * SUPPORTED_CURRENCIES (Req 18.1), reflect the persisted Selected_Currency on
+ * load (Req 18.5), and route changes to onCurrencyChange (Req 18.6, 18.7).
+ * @returns {void}
+ */
+function wireCurrencySelector() {
+  populateCurrencySelect();
+
+  const selectEl = document.getElementById("currency-select");
+  if (!selectEl) return;
+
+  selectEl.addEventListener("change", () => {
+    onCurrencyChange(selectEl.value);
+  });
+}
+
+
  *
  * Renders the custom category list grouped by type (Expense then Income).
  * Default categories are shown with a "(default)" badge and no delete button —
@@ -928,6 +1017,10 @@ function bootstrap() {
   // Ensure a valid persisted schema exists before any read/write (Req 10.4).
   storage.initializeData();
 
+  // Seed the active currency from the persisted setting (Req 18.5). Must happen
+  // before renderAll so the first paint already shows the correct currency symbol.
+  state.selectedCurrency = storage.getCurrency();
+
   wireTransactionForm();
 
   // Delegated delete handling for the Transaction_List (task 3.5, Req 3.3).
@@ -952,6 +1045,12 @@ function bootstrap() {
   // explicitly here so the panel is populated on first paint.
   wireCategoryForm();
   renderCategoryList();
+
+  // Settings: currency selector (task 14.3, Req 18.1, 18.5, 18.6). Populates
+  // the <select> from SUPPORTED_CURRENCIES and wires the change event. Must be
+  // called after state.selectedCurrency is seeded so the selector reflects the
+  // persisted currency on first paint (Req 18.5).
+  wireCurrencySelector();
 
   // Initial paint of every current view for the persisted state: the Dashboard
   // (totals, count, Selected_Month, recent transactions — task 4.1,

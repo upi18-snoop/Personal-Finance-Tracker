@@ -253,7 +253,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ### Phase 5 — Monthly Reports
 
-- [ ] 5. Monthly summary with category analysis
+- [x] 5. Monthly summary with category analysis
   - [x] 5.1 Implement month-scoped reads and category totals in business logic
     - **Objective:** Add `getTransactionsByMonth` and `categoryTotals` to support month-scoped reporting.
     - **Requirements covered:** 5.2
@@ -277,7 +277,7 @@ across the document (dependency graph and coverage matrix reference them directl
       - Changing the month recomputes and redisplays the Monthly_Summary for the new month.
     - **Dependencies:** 5.1, 4.1
 
-  - [ ] 5.3 Render monthly totals (income, expense, net, count)
+  - [x] 5.3 Render monthly totals (income, expense, net, count)
     - **Objective:** Implement `renderMonthlySummary` showing monthly income, expense, Net_Balance, and count for the Selected_Month.
     - **Requirements covered:** 5.3, 5.4, 5.5, 5.6
     - **Files:** `js/reports.js`, `index.html`, `css/styles.css`
@@ -423,7 +423,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ### Phase 9 — Responsive UI
 
-- [ ] 9. Responsive, touch-friendly layout
+- [x] 9. Responsive, touch-friendly layout
   - [x] 9.1 Implement mobile-first layout with no horizontal scroll
     - **Objective:** Ensure all sections stack cleanly on mobile with touch-friendly controls and no horizontal scrolling.
     - **Requirements covered:** 12.1, 12.2, 12.3
@@ -434,7 +434,7 @@ across the document (dependency graph and coverage matrix reference them directl
       - On a mobile viewport, content stacks vertically, controls are touch-operable, and there is no horizontal scroll.
     - **Dependencies:** 1.2, 3.4, 5.3, 6.3, 8.3
 
-  - [ ] 9.2 Implement desktop/tablet multi-column layout and responsive charts
+  - [x] 9.2 Implement desktop/tablet multi-column layout and responsive charts
     - **Objective:** Add breakpoints so balance cards and charts flow into a multi-column grid on wider screens, with charts resizing responsively.
     - **Requirements covered:** 12.1
     - **Files:** `css/styles.css`, `js/charts.js`
@@ -449,8 +449,8 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ### Phase 10 — Error Handling and Security
 
-- [ ] 10. Error handling, safe rendering, and empty states
-  - [ ] 10.1 Consolidate invalid-input and corrupted-storage handling
+- [x] 10. Error handling, safe rendering, and empty states
+  - [x] 10.1 Consolidate invalid-input and corrupted-storage handling
     - **Objective:** Ensure all validation failures surface as inline labelled messages and corrupted storage never breaks the app.
     - **Requirements covered:** 2.4, 2.5, 2.6, 2.7, 2.8, 10.6
     - **Files:** `js/app.js`, `js/transactions.js`, `js/storage.js`
@@ -461,7 +461,7 @@ across the document (dependency graph and coverage matrix reference them directl
       - All invalid inputs are rejected with messages; a corrupted storage value results in a clean start with no unhandled error.
     - **Dependencies:** 3.3, 2.5
 
-  - [ ] 10.2 Enforce safe rendering of user input across the app
+  - [x] 10.2 Enforce safe rendering of user input across the app
     - **Objective:** Ensure all user-provided text is rendered via `textContent`/safe DOM APIs, with no `eval` and no unsafe `innerHTML`.
     - **Requirements covered:** 14.1, 14.2, 15.1
     - **Files:** `js/dashboard.js`, `js/reports.js`, `js/transactions.js`, `js/categories.js`, `js/app.js`
@@ -472,7 +472,7 @@ across the document (dependency graph and coverage matrix reference them directl
       - A crafted item/category name containing HTML renders as literal text; no `eval`/unsafe `innerHTML` present.
     - **Dependencies:** 3.4, 5.4, 8.3
 
-  - [ ] 10.3 Implement global and privacy empty states
+  - [x] 10.3 Implement global and privacy empty states
     - **Objective:** Render the global empty state when there are no transactions and display the privacy statement.
     - **Requirements covered:** 11.1, 11.3, 14.3
     - **Files:** `js/dashboard.js`, `index.html`, `css/styles.css`
@@ -487,8 +487,8 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ### Phase 11 — Quality Assurance
 
-- [ ] 11. Manual QA, compatibility, and performance verification
-  - [ ] 11.1 Execute manual functional test cases
+- [x] 11. Manual QA, compatibility, and performance verification
+  - [x] 11.1 Execute manual functional test cases
     - **Objective:** Run the design's manual acceptance test cases and record results.
     - **Requirements covered:** 1.1–1.8, 2.1–2.13, 3.1–3.7, 4.1–4.14, 5.1–5.9, 6.1–6.7, 7.1–7.7, 8.1–8.8, 9.1–9.5, 10.1–10.7, 11.1–11.3
     - **Files:** `README.md` (record results/checklist)
@@ -499,7 +499,7 @@ across the document (dependency graph and coverage matrix reference them directl
       - All manual test cases pass; consistency regression confirms filtering is read-only.
     - **Dependencies:** 6.4, 7.5, 8.3, 10.3
 
-  - [ ] 11.2 Verify browser compatibility and mobile behavior
+  - [x] 11.2 Verify browser compatibility and mobile behavior
     - **Objective:** Confirm the app works in modern Chrome, Firefox, Edge, and Safari and on mobile screen sizes.
     - **Requirements covered:** 12.1, 12.2, 12.3, 15.3
     - **Files:** `README.md` (record compatibility notes)
@@ -510,7 +510,7 @@ across the document (dependency graph and coverage matrix reference them directl
       - Core flows work across the four browsers; mobile and keyboard operation verified.
     - **Dependencies:** 9.2, 11.1
 
-  - [ ] 11.3 Verify performance with large datasets
+  - [x] 11.3 Verify performance with large datasets
     - **Objective:** Confirm the app stays responsive with several thousand transactions and avoids unnecessary chart recreation and DOM rebuilds.
     - **Requirements covered:** 16.2, 16.3, 16.4
     - **Files:** `README.md` (record performance notes)
@@ -525,8 +525,8 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ### Phase 12 — Documentation
 
-- [ ] 12. Project documentation
-  - [ ] 12.1 Write README with setup, deployment, privacy, and future architecture
+- [x] 12. Project documentation
+  - [x] 12.1 Write README with setup, deployment, privacy, and future architecture
     - **Objective:** Document how to run and deploy the app, the privacy model, and the documented future extension points.
     - **Requirements covered:** 13.2, 13.3, 13.4, 14.3, 16.1
     - **Files:** `README.md`
@@ -543,7 +543,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ### Phase 13 — Final Verification
 
-- [ ] 13. Final full-application verification against all requirements
+- [x] 13. Final full-application verification against all requirements
   - **Objective:** Verify the completed application against ALL 17 requirements and their acceptance criteria using the coverage matrix below.
   - **Requirements covered:** 1–17 (all)
   - **Files:** `README.md` (final verification checklist), all `js/*.js`, `index.html`, `css/styles.css`
@@ -567,7 +567,7 @@ formatter change here is a **modification of that already-complete code**, repre
 Selected_Currency is a presentation-only display setting.
 
 - [ ] 14. Configurable single currency (Selected_Currency across all displayed money)
-  - [ ] 14.1 Extend the Currency_Formatter for configurable currency + locale
+  - [x] 14.1 Extend the Currency_Formatter for configurable currency + locale
     - **Objective:** Generalize `utils.formatCurrency` from the fixed `id-ID` implementation to a currency- and locale-parameterized formatter, and add the `SUPPORTED_CURRENCIES` source-of-truth map.
     - **Requirements covered:** 9.1, 9.2, 9.3, 9.4, 9.5
     - **Files:** `js/utils.js`
@@ -580,7 +580,7 @@ Selected_Currency is a presentation-only display setting.
       - `formatCurrency(1500, "USD", "en-US")` and other Supported_Currencies produce their `Intl.NumberFormat` currency strings; no hard-coded Indonesian locale remains.
     - **Dependencies:** 2.1
 
-  - [ ] 14.2 Add Selected_Currency accessors in the storage layer
+  - [x] 14.2 Add Selected_Currency accessors in the storage layer
     - **Objective:** Add `getCurrency()`/`setCurrency(code)` as a currency-focused facade over `loadData/saveData`, applying the default-to-IDR fallback and validating against Supported_Currencies.
     - **Requirements covered:** 18.2, 18.3, 18.4, 9.8
     - **Files:** `js/storage.js`
@@ -593,7 +593,7 @@ Selected_Currency is a presentation-only display setting.
       - `setCurrency("USD")` persists the setting and does not alter any transaction.
     - **Dependencies:** 2.3
 
-  - [ ] 14.3 Build the Settings Currency UI and wire currency changes in app.js
+  - [-] 14.3 Build the Settings Currency UI and wire currency changes in app.js
     - **Objective:** Add the Settings currency selector, seed `state.selectedCurrency` at bootstrap, and implement `onCurrencyChange` as a presentation-only re-render.
     - **Requirements covered:** 18.1, 18.5, 18.6, 18.7
     - **Files:** `index.html`, `js/app.js`, `css/styles.css`

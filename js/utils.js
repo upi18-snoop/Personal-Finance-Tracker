@@ -10,27 +10,67 @@
  */
 
 /**
+ * SUPPORTED_CURRENCIES — single source of truth for the 14 selectable ISO 4217
+ * currency codes (Req 9.1). Maps each code to its default locale and a human-
+ * readable label for the Settings UI.
+ *
+ * The `locale` entry is the BCP 47 locale tag that Intl.NumberFormat should use
+ * when a caller does not supply an explicit locale, ensuring that each currency
+ * defaults to its most natural formatting convention.
+ *
+ * @type {Record<string, { locale: string, label: string }>}
+ */
+export const SUPPORTED_CURRENCIES = {
+  USD: { locale: "en-US",  label: "US Dollar"        },
+  EUR: { locale: "de-DE",  label: "Euro"              },
+  GBP: { locale: "en-GB",  label: "British Pound"     },
+  IDR: { locale: "id-ID",  label: "Indonesian Rupiah" },
+  JPY: { locale: "ja-JP",  label: "Japanese Yen"      },
+  CNY: { locale: "zh-CN",  label: "Chinese Yuan"      },
+  SGD: { locale: "en-SG",  label: "Singapore Dollar"  },
+  AUD: { locale: "en-AU",  label: "Australian Dollar" },
+  CAD: { locale: "en-CA",  label: "Canadian Dollar"   },
+  CHF: { locale: "de-CH",  label: "Swiss Franc"       },
+  MYR: { locale: "ms-MY",  label: "Malaysian Ringgit" },
+  THB: { locale: "th-TH",  label: "Thai Baht"         },
+  INR: { locale: "en-IN",  label: "Indian Rupee"      },
+  KRW: { locale: "ko-KR",  label: "South Korean Won"  },
+};
+
+/**
  * Currency_Formatter (Req 9). The only place currency strings are produced.
  *
- * Produces Indonesian-style currency strings such as "Rp 1.500.000": a period
- * as the thousands separator and the "Rp" symbol followed by a single space
- * (Req 9.2). Parameterized by `currency` so future currencies can be added
- * without changing any caller (Req 9.5).
+ * Formats `amount` as a currency string for the given `currency` code and
+ * `locale` (Req 9.3, 9.4). No locale is hard-coded — when the caller omits
+ * `locale`, the default locale for `currency` is resolved from
+ * `SUPPORTED_CURRENCIES` (IDR → "id-ID", USD → "en-US", etc.).
  *
- * `Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' })` yields
- * "Rp1.500.000" or "Rp 1.500.000" depending on the runtime, and includes a
- * fractional part. We format without fraction digits and normalize the output
- * so there is exactly one space after the "Rp" symbol.
+ * Backward-compatible: existing callers that pass only `amount` or
+ * `(amount, "IDR")` still receive "Rp 1.500.000"-style output because IDR
+ * defaults to the "id-ID" locale (Req 9.2 implicit, no regression).
+ *
+ * The output is normalized so there is exactly one ASCII space after the
+ * leading currency symbol regardless of what the runtime inserts (no space,
+ * regular space U+0020, or non-breaking space U+00A0).
  *
  * @param {number} amount
  * @param {string} [currency="IDR"]
+ * @param {string} [locale] - BCP 47 locale tag; defaults to the locale mapped
+ *   in SUPPORTED_CURRENCIES for the given currency, or "en-US" as a last
+ *   resort for unknown codes.
  * @returns {string}
  */
-export function formatCurrency(amount, currency = "IDR") {
+export function formatCurrency(amount, currency = "IDR", locale) {
   const value = Number(amount);
   const safeValue = Number.isFinite(value) ? value : 0;
 
-  const formatted = new Intl.NumberFormat("id-ID", {
+  // Resolve locale: caller-supplied → SUPPORTED_CURRENCIES map → en-US fallback
+  const resolvedLocale =
+    locale ||
+    (SUPPORTED_CURRENCIES[currency] && SUPPORTED_CURRENCIES[currency].locale) ||
+    "en-US";
+
+  const formatted = new Intl.NumberFormat(resolvedLocale, {
     style: "currency",
     currency,
     minimumFractionDigits: 0,

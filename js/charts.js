@@ -42,7 +42,7 @@ function buildColors(count) {
 }
 
 /* --------------------------------------------------------------------------
- * Module-level Chart instances and canvas contexts.
+ * Module-level Chart instances, canvas contexts, and resize observer.
  * Only this module reads or writes these references (Req 16.2).
  * -------------------------------------------------------------------------- */
 
@@ -51,6 +51,18 @@ let expenseChart = null;
 
 /** @type {import("chart.js").Chart | null} */
 let incomeChart = null;
+
+/**
+ * ResizeObserver that tells Chart.js to recalculate dimensions whenever the
+ * chart containers change size (e.g., when the layout switches from single-
+ * column to two-column at the ≥600px breakpoint — task 9.2, Req 12.1).
+ * Chart.js sets `responsive: true` on each instance so it listens to the
+ * canvas element itself, but an explicit `chart.resize()` call on the
+ * container resize ensures there is no momentary blank frame during the
+ * layout transition.
+ * @type {ResizeObserver | null}
+ */
+let resizeObserver = null;
 
 /* --------------------------------------------------------------------------
  * initCharts() — Req 6.1, 15.6
@@ -130,6 +142,29 @@ export function initCharts() {
   expenseCanvas.hidden = true;
   incomeCanvas.hidden = true;
 
+  // Attach a ResizeObserver so Chart.js instances explicitly resize when their
+  // container changes dimensions (e.g., when the CSS grid breakpoint switches
+  // the charts section from single-column to two-column at ≥600px — task 9.2,
+  // Req 12.1). Chart.js already handles this internally via its own resize
+  // listener, but calling chart.resize() directly eliminates any momentary blank
+  // frame during the layout transition.
+  //
+  // Guard: ResizeObserver is available in all modern browsers targeted by v1
+  // (Chrome, Firefox, Edge, Safari). The feature-detect is a safety measure
+  // only; not having ResizeObserver does not break the charts, they just will
+  // not get the explicit nudge on container resize.
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(() => {
+      if (expenseChart !== null) expenseChart.resize();
+      if (incomeChart !== null) incomeChart.resize();
+    });
+
+    const expenseContainer = document.getElementById("expense-chart-container");
+    const incomeContainer = document.getElementById("income-chart-container");
+    if (expenseContainer) resizeObserver.observe(expenseContainer);
+    if (incomeContainer) resizeObserver.observe(incomeContainer);
+  }
+
   // Accessible text descriptions for screen readers (Req 15.6).
   const expenseDesc = document.getElementById("expense-chart-description");
   const incomeDesc = document.getElementById("income-chart-description");
@@ -150,11 +185,20 @@ export function initCharts() {
  * before reinitialising; it is exposed for explicit resets (e.g. test teardown or a future
  * hard-reset flow).
  *
+ * Also disconnects the ResizeObserver (task 9.2) so there are no dangling observers
+ * after the chart instances are gone.
+ *
  * Sets module-level variables back to null after destruction so subsequent `update*`
  * calls correctly detect the uninitialised state.
  * @returns {void}
  */
 export function destroyCharts() {
+  // Disconnect resize observer before destroying charts so the callback does
+  // not fire on already-destroyed instances (task 9.2).
+  if (resizeObserver !== null) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
   if (expenseChart !== null) {
     expenseChart.destroy();
     expenseChart = null;

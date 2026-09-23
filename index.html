@@ -21,8 +21,16 @@
   </header>
 
   <main class="app-main" id="app-main">
+    <!--
+      Global empty state (Req 11.1, 11.3): shown when no transactions exist;
+      hidden once the first transaction is added via renderGlobalEmptyState().
+    -->
+    <section class="section global-empty-state" id="global-empty-state" aria-label="Getting started">
+      <p class="global-empty-state__message" id="global-empty-state-message">No transactions yet. Add your first income or expense.</p>
+    </section>
+
     <!-- Balance summary cards: Total_Balance, Total_Income, Total_Expense, count -->
-    <section class="section balance-section" id="balance-section" aria-labelledby="balance-heading">
+    <section class="section balance-section" id="balance-section" aria-labelledby="balance-heading" hidden>
       <h2 class="section-heading" id="balance-heading">Overview</h2>
       <div class="balance-cards" id="balance-cards">
         <article class="balance-card" id="card-total-balance">
@@ -45,7 +53,7 @@
     </section>
 
     <!-- Recent transactions (Dashboard): most recent transactions, newest→oldest -->
-    <section class="section recent-transactions-section" id="recent-transactions-section" aria-labelledby="recent-transactions-heading">
+    <section class="section recent-transactions-section" id="recent-transactions-section" aria-labelledby="recent-transactions-heading" hidden>
       <h2 class="section-heading" id="recent-transactions-heading">Recent Transactions</h2>
       <ul class="transaction-list recent-transactions-list" id="recent-transactions-list"></ul>
       <p class="empty-state" id="recent-transactions-empty" hidden></p>
@@ -102,7 +110,7 @@
     </section>
 
     <!-- Monthly summary: monthly income/expense/net/count + category breakdowns -->
-    <section class="section monthly-summary-section" id="monthly-summary-section" aria-labelledby="monthly-summary-heading">
+    <section class="section monthly-summary-section" id="monthly-summary-section" aria-labelledby="monthly-summary-heading" hidden>
       <h2 class="section-heading" id="monthly-summary-heading">Monthly Summary</h2>
       <div class="monthly-summary" id="monthly-summary">
         <p class="monthly-summary__income" id="monthly-income-value" data-role="monthly-income"></p>
@@ -121,24 +129,27 @@
     </section>
 
     <!-- Charts: expense-by-category and income-by-category canvases -->
-    <section class="section charts-section" id="charts-section" aria-labelledby="charts-heading">
+    <section class="section charts-section" id="charts-section" aria-labelledby="charts-heading" hidden>
       <h2 class="section-heading" id="charts-heading">Charts</h2>
-      <div class="chart-container" id="expense-chart-container">
-        <h3 class="chart-container__heading">Expenses by category</h3>
-        <canvas id="expense-chart" role="img" aria-label="Expenses by category chart" aria-describedby="expense-chart-description"></canvas>
-        <p class="chart-description" id="expense-chart-description" data-role="expense-chart-description"></p>
-        <p class="empty-state" id="expense-chart-empty" hidden></p>
-      </div>
-      <div class="chart-container" id="income-chart-container">
-        <h3 class="chart-container__heading">Income by category</h3>
-        <canvas id="income-chart" role="img" aria-label="Income by category chart" aria-describedby="income-chart-description"></canvas>
-        <p class="chart-description" id="income-chart-description" data-role="income-chart-description"></p>
-        <p class="empty-state" id="income-chart-empty" hidden></p>
+      <!-- chart-row: single column on mobile; 2-column side-by-side on ≥600px (task 9.2) -->
+      <div class="chart-row">
+        <div class="chart-container" id="expense-chart-container">
+          <h3 class="chart-container__heading">Expenses by category</h3>
+          <canvas id="expense-chart" role="img" aria-label="Expenses by category chart" aria-describedby="expense-chart-description"></canvas>
+          <p class="chart-description" id="expense-chart-description" data-role="expense-chart-description"></p>
+          <p class="empty-state" id="expense-chart-empty" hidden></p>
+        </div>
+        <div class="chart-container" id="income-chart-container">
+          <h3 class="chart-container__heading">Income by category</h3>
+          <canvas id="income-chart" role="img" aria-label="Income by category chart" aria-describedby="income-chart-description"></canvas>
+          <p class="chart-description" id="income-chart-description" data-role="income-chart-description"></p>
+          <p class="empty-state" id="income-chart-empty" hidden></p>
+        </div>
       </div>
     </section>
 
     <!-- Transaction list with filter/search controls -->
-    <section class="section transaction-list-section" id="transaction-list-section" aria-labelledby="transaction-list-heading">
+    <section class="section transaction-list-section" id="transaction-list-section" aria-labelledby="transaction-list-heading" hidden>
       <h2 class="section-heading" id="transaction-list-heading">Transactions</h2>
       <form class="filter-controls" id="filter-controls" aria-label="Filter transactions">
         <div class="form-field">
@@ -190,6 +201,22 @@
         <p class="form-error" id="category-form-error" role="alert" aria-live="polite"></p>
       </form>
       <ul class="category-list" id="category-list"></ul>
+    </section>
+
+    <!-- Settings section: currency selector (Req 18.1, 18.5, 18.6) -->
+    <section class="section settings-section" id="settings-section" aria-labelledby="settings-heading">
+      <h2 class="section-heading" id="settings-heading">Settings</h2>
+      <form class="settings-form" id="settings-form" novalidate>
+        <div class="form-field">
+          <label for="currency-select">Currency</label>
+          <select id="currency-select" name="currency" aria-describedby="currency-select-hint">
+            <!-- Options populated dynamically from SUPPORTED_CURRENCIES in app.js -->
+          </select>
+          <span class="settings-form__hint" id="currency-select-hint">
+            Changes how amounts are displayed. Your stored data is not affected.
+          </span>
+        </div>
+      </form>
     </section>
   </main>
 

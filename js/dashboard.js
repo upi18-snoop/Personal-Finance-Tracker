@@ -82,6 +82,49 @@ export function renderCategoryOptions(selectEl, type) {
 }
 
 /**
+ * Section IDs that contain meaningful data-dependent content. These are hidden
+ * when no transactions exist (Req 11.1) and revealed once the first transaction
+ * is added (Req 11.3). The add-transaction form, month selector, and category
+ * management panel are intentionally excluded so the user can still interact
+ * with them on a fresh app.
+ * @type {readonly string[]}
+ */
+const DATA_SECTION_IDS = [
+  "balance-section",
+  "recent-transactions-section",
+  "monthly-summary-section",
+  "charts-section",
+  "transaction-list-section",
+];
+
+/**
+ * Render the global Empty_State when there are no transactions (Req 11.1,
+ * 11.3). Shows `#global-empty-state` and hides the data-dependent sections
+ * when `hasTransactions` is false; reverses both when `hasTransactions` is
+ * true so the first transaction replaces the empty state with populated views.
+ *
+ * This is the single place the global empty state is toggled. `renderDashboard`
+ * calls it after computing totals so the decision is always based on the live
+ * transaction count — never a stale snapshot.
+ *
+ * @param {boolean} hasTransactions
+ * @returns {void}
+ */
+export function renderGlobalEmptyState(hasTransactions) {
+  const emptyEl = document.getElementById("global-empty-state");
+  if (emptyEl) {
+    emptyEl.hidden = hasTransactions;
+  }
+
+  for (const id of DATA_SECTION_IDS) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.hidden = !hasTransactions;
+    }
+  }
+}
+
+/**
  * Maximum number of transactions shown in the Recent Transactions list. The
  * acceptance requirement is ordering newest→oldest (Req 1.4); capping keeps the
  * dashboard glanceable without changing that ordering.
@@ -95,12 +138,13 @@ const RECENT_TRANSACTIONS_LIMIT = 5;
  * through the Currency_Formatter and written with `safeText` (never innerHTML).
  * @param {string} elementId
  * @param {number} amount
+ * @param {string} [currency="IDR"] Active Selected_Currency for formatting (Req 9.6).
  * @returns {void}
  */
-function renderMoneyValue(elementId, amount) {
+function renderMoneyValue(elementId, amount, currency = "IDR") {
   const el = document.getElementById(elementId);
   if (!el) return;
-  utils.safeText(el, utils.formatCurrency(amount));
+  utils.safeText(el, utils.formatCurrency(amount, currency));
 }
 
 /**
@@ -116,19 +160,27 @@ function renderMoneyValue(elementId, amount) {
  * Each DOM write is guarded so a missing element is simply skipped. Finally the
  * recent-transactions list is rendered newest→oldest (Req 1.4).
  *
- * @param {object} state App state (reads `state.selectedMonth`).
+ * @param {object} state App state (reads `state.selectedMonth`, `state.selectedCurrency`).
  * @returns {void}
  */
 export function renderDashboard(state) {
+  const currency = (state && state.selectedCurrency) ? state.selectedCurrency : "IDR";
   const allTransactions = transactions.getTransactions();
 
   // Totals from the single source of truth — dashboard never sums money itself.
   const totals = transactions.calculateTotals(allTransactions);
 
-  // Balance cards, every money value formatted via the Currency_Formatter.
-  renderMoneyValue("total-balance-value", totals.balance);
-  renderMoneyValue("total-income-value", totals.totalIncome);
-  renderMoneyValue("total-expense-value", totals.totalExpense);
+  // Global empty state: show the Empty_State when there are no transactions and
+  // hide the data-dependent sections; reveal them once transactions exist
+  // (Req 11.1, 11.3). This is the authoritative call-site for this toggle so
+  // it fires on every re-render triggered by add/delete.
+  renderGlobalEmptyState(totals.count > 0);
+
+  // Balance cards, every money value formatted via the Currency_Formatter with
+  // the active Selected_Currency (Req 9.6).
+  renderMoneyValue("total-balance-value", totals.balance, currency);
+  renderMoneyValue("total-income-value", totals.totalIncome, currency);
+  renderMoneyValue("total-expense-value", totals.totalExpense, currency);
 
   // Transaction count is a plain integer, not a monetary value.
   const countEl = document.getElementById("transaction-count-value");
@@ -144,7 +196,7 @@ export function renderDashboard(state) {
   }
 
   // Recent transactions, newest→oldest (Req 1.4).
-  renderRecentTransactions(allTransactions);
+  renderRecentTransactions(allTransactions, currency);
 }
 
 /**
@@ -156,9 +208,10 @@ export function renderDashboard(state) {
  * cleared and its empty-state element (if present) is revealed instead.
  *
  * @param {object[]} transactionList
+ * @param {string} [currency="IDR"] Active Selected_Currency for formatting (Req 9.6).
  * @returns {void}
  */
-export function renderRecentTransactions(transactionList) {
+export function renderRecentTransactions(transactionList, currency = "IDR") {
   const listEl = document.getElementById("recent-transactions-list");
   if (!listEl) return;
   const list = Array.isArray(transactionList) ? transactionList : [];
@@ -177,7 +230,7 @@ export function renderRecentTransactions(transactionList) {
 
   listEl.replaceChildren();
   for (const transaction of recent) {
-    listEl.appendChild(renderTransactionRow(transaction));
+    listEl.appendChild(renderTransactionRow(transaction, currency));
   }
 
   // Toggle the recent-transactions empty state when there is nothing to show.
@@ -205,13 +258,14 @@ export function renderRecentTransactions(transactionList) {
  *
  * All user-provided text (item name, Category) is written via `safeText`
  * (textContent), never innerHTML, so a crafted item name cannot inject markup.
- * The monetary value is formatted only through `utils.formatCurrency` (Req 9,
- * currency isolation).
+ * The monetary value is formatted only through `utils.formatCurrency` with the
+ * active Selected_Currency (Req 9, 9.6).
  *
  * @param {object} transaction Transaction { id, type, itemName, amount, category, date }
+ * @param {string} [currency="IDR"] Active Selected_Currency for formatting (Req 9.6).
  * @returns {HTMLLIElement}
  */
-export function renderTransactionRow(transaction) {
+export function renderTransactionRow(transaction, currency = "IDR") {
   const isIncome = transaction && transaction.type === "income";
 
   const row = document.createElement("li");
@@ -242,13 +296,14 @@ export function renderTransactionRow(transaction) {
   utils.safeText(date, transaction ? transaction.date : "");
 
   // Amount — the only visually distinct field (Req 3.2). Color via class,
-  // sign via a leading +/- prefix; value formatted through the Currency_Formatter.
+  // sign via a leading +/- prefix; value formatted through the Currency_Formatter
+  // with the active Selected_Currency (Req 9.6).
   const amount = document.createElement("span");
   amount.className = "transaction-row__amount";
   amount.classList.add(isIncome ? "u-text-income" : "u-text-expense");
   const sign = isIncome ? "+" : "-";
   const rawAmount = transaction ? transaction.amount : 0;
-  utils.safeText(amount, `${sign}${utils.formatCurrency(rawAmount)}`);
+  utils.safeText(amount, `${sign}${utils.formatCurrency(rawAmount, currency)}`);
 
   row.append(name, category, type, date, amount);
   return row;
@@ -269,16 +324,17 @@ export function renderTransactionRow(transaction) {
  *
  * @param {object[]} transactionList
  * @param {string} [emptyMessage] - Message shown when the list is empty.
+ * @param {string} [currency="IDR"] Active Selected_Currency for formatting (Req 9.6).
  * @returns {void}
  */
-export function renderTransactionListRows(transactionList, emptyMessage) {
+export function renderTransactionListRows(transactionList, emptyMessage, currency = "IDR") {
   const listEl = document.getElementById("transaction-list");
   if (!listEl) return;
   const list = Array.isArray(transactionList) ? transactionList : [];
 
   listEl.replaceChildren();
   for (const transaction of list) {
-    listEl.appendChild(renderTransactionRow(transaction));
+    listEl.appendChild(renderTransactionRow(transaction, currency));
   }
 
   // Toggle the empty-state element. The caller may supply a context-aware
