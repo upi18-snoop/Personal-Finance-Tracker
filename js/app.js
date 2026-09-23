@@ -1466,9 +1466,6 @@ function showSignedInState(email) {
   if (signedInBadge) signedInBadge.hidden = false;
   if (showLoginBtn) showLoginBtn.hidden = true;
   if (showRegisterBtn) showRegisterBtn.hidden = true;
-
-  // Track the current user in state.
-  state.currentUser = { email };
 }
 
 /**
@@ -1589,22 +1586,13 @@ function onLoginSubmit(event) {
     const result = await auth.signIn(values.email, values.password);
 
     if (result.ok) {
-      // Login succeeded: show success message and basic signed-in indication.
-      const successEl = document.getElementById('login-success');
-      const successMsg = document.getElementById('login-success-message');
-      if (successMsg) {
-        utils.safeText(
-          successMsg,
-          'Signed in as ' + result.user.email + '. Welcome back!'
-        );
-      }
-      if (successEl) successEl.hidden = false;
-
-      // Update header to show the authenticated email.
-      // The onAuthStateChange callback (registered in initAuthSession) handles
-      // showing the protected app and initializing the finance application (task 15.8).
-      showSignedInState(result.user.email);
-
+      // Login succeeded. The onAuthStateChange callback (registered in
+      // initAuthSession) fires SIGNED_IN, sets state.currentUser = { id, email },
+      // calls showSignedInState(), showProtectedApp(), and
+      // initializeFinanceApplication(). We must NOT call showSignedInState()
+      // here because that would clobber state.currentUser with { email } only,
+      // losing the immutable user id needed as the future ownership key.
+      // The listener also closes this login section, so no explicit hide is needed.
       return;
     }
 
