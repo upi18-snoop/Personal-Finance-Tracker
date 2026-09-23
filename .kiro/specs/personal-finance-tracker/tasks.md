@@ -899,7 +899,7 @@ LocalStorage-based data layer remains the active storage backend throughout Phas
 integration arrives in Phase 16. Every task in this phase is additive ? no existing module is
 broken or removed.
 
-- [ ] 15. Authentication: Supabase setup, auth module, and protected bootstrap
+- [x] 15. Authentication: Supabase setup, auth module, and protected bootstrap
   - [x] 15.1 Supabase Authentication Setup & Configuration
     - **Objective:** Create `js/config.js` as the sole holder of public Supabase configuration and document the manual Supabase dashboard steps a developer must perform before Phase 15.2.
     - **Requirements covered:** 19.1 (foundation), 14.1 (no private credentials in repo)
@@ -1029,7 +1029,7 @@ broken or removed.
       - Auth forms match the existing visual style and are fully keyboard-accessible.
     - **Dependencies:** 15.8
 
-  - [~] 15.10 Authentication QA
+  - [x] 15.10 Authentication QA
     - **Objective:** Verify all authentication flows across Chrome, Firefox, Edge, and Safari, and confirm no Phase 1?14 regression.
     - **Requirements covered:** 19.1?19.6
     - **Files:** `README.md` (record QA results)

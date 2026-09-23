@@ -1446,12 +1446,12 @@ function getLoginErrorMessage(error) {
 }
 
 /**
- * Update the header to reflect a signed-in state.
- * Shows the authenticated email and hides the Sign in / Create account buttons.
- * Passwords are never stored, logged, or shown — only the email is displayed.
+ * Update the header UI to reflect a signed-in state (UI-only).
+ * Shows the authenticated email badge and hides the Sign in / Create account
+ * buttons. Does NOT modify state.currentUser — callers are responsible for
+ * setting state.currentUser = { id, email } before calling this function.
  *
- * This is the basic signed-in indication for Task 15.4. The full authenticated
- * header (with a logout button) is implemented in Task 15.5.
+ * Passwords are never stored, logged, or shown — only the email is displayed.
  *
  * @param {string} email  The authenticated user's email address.
  * @returns {void}

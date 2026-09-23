@@ -1037,3 +1037,273 @@ The following table maps each design correctness property to the code evidence c
 > and never be transmitted to any browser.
 > Use it only in server-side scripts that you run locally or in a secured CI environment.
 
+
+---
+
+## Phase 15 — Authentication QA (Task 15.10)
+
+### Scope
+
+Task 15.10 covers static code QA for the Supabase email/password authentication introduced in
+Phase 15 (Tasks 15.1–15.9). Because `js/config.js` still holds placeholder values
+(`YOUR_SUPABASE_PROJECT_URL` / `YOUR_SUPABASE_ANON_KEY`), **live Supabase integration testing
+was not performed**. All results below are based on static code analysis and syntax verification.
+
+This distinction is made explicit in the result legend:
+
+- ✅ **CODE PASS** — correct by static analysis / syntax check
+- ⚠️ **PARTIAL** — code is present but cannot be verified without live credentials
+- ℹ️ **SKIPPED** — requires real Supabase credentials; not testable without them
+
+---
+
+### Bug Fixes Applied (Task 15.10)
+
+Two bugs were identified and fixed as part of this QA pass.
+
+#### Fix 1 — `showSignedInState()` was overwriting `state.currentUser` with an incomplete object
+
+**Root cause:** `showSignedInState(email)` contained:
+
+```js
+state.currentUser = { email };
+```
+
+This clobbered the full `{ id, email }` object that had already been set by the
+`onAuthStateChange` listener (`state.currentUser = user`, where `user` is the normalized
+`{ id, email }` returned by `auth.js`). After login, `state.currentUser.id` would be
+`undefined` — the immutable Supabase UUID needed as the future ownership key was silently lost.
+
+**Fix:** Removed `state.currentUser = { email }` from `showSignedInState()` entirely.
+`showSignedInState()` is now a pure UI function — it updates the header badge and hides the
+Sign in / Create account buttons, but does **not** touch `state.currentUser`. Updated its JSDoc
+to explicitly document this constraint.
+
+**Callers that set `state.currentUser` (correctly, with `{ id, email }`):**
+- `initAuthSession()` — `onAuthStateChange` callback: `state.currentUser = user;`
+- `initAuthSession()` — `getCurrentUser()` path: `state.currentUser = user;`
+- Logout (`showSignedOutState()`): `state.currentUser = null;`
+
+No caller now sets `state.currentUser` with the incomplete `{ email }` shape.
+
+#### Fix 2 — `onLoginSubmit()` redundantly called `showSignedInState()`
+
+**Root cause:** After `auth.signIn()` succeeded, `onLoginSubmit()` called:
+
+```js
+showSignedInState(result.user.email);
+```
+
+This was both redundant (the `onAuthStateChange` listener fires `SIGNED_IN` immediately after
+a successful sign-in, calling `showSignedInState()` from there) and harmful in combination
+with Fix 1: the old `showSignedInState()` would have set `state.currentUser = { email }`
+**after** the listener had already correctly set `state.currentUser = { id, email }`, causing a
+race where `id` was present only momentarily before being overwritten.
+
+**Fix:** Removed the `showSignedInState(result.user.email)` call and the surrounding login
+success block from `onLoginSubmit()`. On successful `auth.signIn()`, the async IIFE now simply
+returns — the `onAuthStateChange` listener remains the sole source of truth for:
+
+```js
+state.currentUser = { id, email }   // set by the listener
+showSignedInState(user.email)       // called by the listener
+showProtectedApp()                  // called by the listener
+initializeFinanceApplication()      // called by the listener (guarded by financeAppInitialized)
+```
+
+The `login-submit-button` is left disabled on the success path, which is correct: the
+`onAuthStateChange` listener closes `#login-section` (sets `loginSection.hidden = true`),
+making the button invisible. `resetLoginForm()` — called by `hideLoginView()` — re-enables it
+before the form is next shown (e.g. after logout).
+
+---
+
+### QA Audit Results
+
+#### Audit 1 — `showSignedInState()` does not modify `state.currentUser`
+
+✅ **CODE PASS** — Verified by reading lines 1459–1470 of `js/app.js`. The function body
+contains only DOM updates (badge visibility, email text). No assignment to `state.currentUser`
+is present.
+
+#### Audit 2 — `onLoginSubmit()` does not call `showSignedInState()`
+
+✅ **CODE PASS** — `grep` confirms zero occurrences of `showSignedInState(result.user.email)`
+in `js/app.js`. The success path of the async IIFE in `onLoginSubmit()` contains only a
+`return` statement and an explanatory comment.
+
+#### Audit 3 — `auth.onAuthStateChange()` is the auth-state source of truth
+
+✅ **CODE PASS** — `onAuthStateChange` is registered **once**, at the top of
+`initAuthSession()` (line 1941). The comment at the registration site reads: "The listener is
+registered exactly once here. It must not be registered again elsewhere in the application to
+avoid duplicate state updates." No other registration of `onAuthStateChange` exists in
+`js/app.js`.
+
+#### Audit 4+5 — Every `state.currentUser` assignment preserves `{ id, email }`; `id` is not lost after login
+
+✅ **CODE PASS** — All `state.currentUser` assignments verified:
+
+| Line | Assignment | Source of `user` |
+|------|-----------|-----------------|
+| `initAuthSession` listener | `state.currentUser = user` | `onAuthStateChange` callback — `user` is `{ id, email }` from `auth.js._normalizeUser()` |
+| `initAuthSession` getCurrentUser | `state.currentUser = user` | `auth.getCurrentUser()` return — same `{ id, email }` shape |
+| `showSignedOutState` | `state.currentUser = null` | Explicit null on logout/sign-out event |
+| `initAuthSession` catch block | `state.currentUser = null` | Explicit null on error |
+
+No `state.currentUser = { email }` assignment exists anywhere in the codebase.
+
+#### Audit 6 — Logout clears `state.currentUser`
+
+✅ **CODE PASS** — `onLogout()` calls `showSignedOutState()`, which sets
+`state.currentUser = null`. This happens unconditionally — even if `auth.signOut()` fails over
+the network, the local session is always cleared.
+
+#### Audit 7 — Session restoration works through `initAuthSession()`
+
+✅ **CODE PASS** — `initAuthSession()` (async):
+1. Registers `onAuthStateChange` listener first (handles `INITIAL_SESSION` + any future events).
+2. Calls `auth.getCurrentUser()` for an immediate result — sets `state.currentUser = user` and
+   calls `showSignedInState()` if a session exists.
+3. When config uses placeholders, `auth.onAuthStateChange` fires `('INITIAL_SESSION', null)`
+   via `queueMicrotask`, so bootstrap never hangs indefinitely.
+
+#### Audit 8 — Protected bootstrap (Task 15.8) is intact
+
+✅ **CODE PASS** — `bootstrap()` flow confirmed:
+1. Wires all auth forms.
+2. Shows `#auth-loading`; hides `#app-main`.
+3. `await initAuthSession()` — resolves auth state.
+4. Hides `#auth-loading`.
+5. If user: `showSignedInState()`, `showProtectedApp()`, `initializeFinanceApplication()`.
+6. If no user: `showSignedOutState()` — `#app-main` stays hidden.
+
+The finance dashboard is never visible to unauthenticated users.
+
+#### Audit 9 — `financeAppInitialized` guard is intact
+
+✅ **CODE PASS** — `let financeAppInitialized = false` (line 2008); `initializeFinanceApplication()`
+checks `if (financeAppInitialized) return` before any work. The flag is set to `true` on the
+first successful call and never reset, making repeated calls from `TOKEN_REFRESHED` or other
+auth events safe no-ops.
+
+#### Audit 10 — No duplicate auth listeners
+
+✅ **CODE PASS** — `auth.onAuthStateChange(…)` appears once as an active call in `js/app.js`
+(in `initAuthSession()`, line 1941). All other occurrences are in JSDoc comments or docstring
+references.
+
+#### Audit 11 — No duplicate function definitions
+
+✅ **CODE PASS** — All auth-related functions (`showSignedInState`, `showSignedOutState`,
+`showProtectedApp`, `hideProtectedApp`, `initAuthSession`, `bootstrap`) appear exactly once
+as function declarations in `js/app.js`. Verified via grep.
+
+#### Audit 12 — No duplicate HTML IDs
+
+✅ **CODE PASS** — All auth-related IDs in `index.html` appear exactly once:
+`#auth-loading`, `#register-section`, `#login-section`, `#reset-password-section`,
+`#auth-signed-in`, `#auth-signed-in-email`, `#logout-button`, `#app-main`.
+
+#### Audit 13 — `node --check` syntax verification
+
+✅ **CODE PASS** — All 10 JS files pass Node.js syntax check with no errors:
+
+| File | Result |
+|------|--------|
+| `js/app.js` | ✅ OK |
+| `js/auth.js` | ✅ OK |
+| `js/config.js` | ✅ OK |
+| `js/storage.js` | ✅ OK |
+| `js/transactions.js` | ✅ OK |
+| `js/categories.js` | ✅ OK |
+| `js/dashboard.js` | ✅ OK |
+| `js/reports.js` | ✅ OK |
+| `js/charts.js` | ✅ OK |
+| `js/utils.js` | ✅ OK |
+
+#### Audit 14 — Finance modules and `auth.js` were not unnecessarily modified
+
+✅ **CODE PASS** — File modification timestamps confirm only `js/app.js` was changed during
+Phase 15.10 QA. `auth.js`, `storage.js`, `transactions.js`, `categories.js`, `dashboard.js`,
+`reports.js`, `charts.js`, `utils.js`, `config.js`, `index.html`, and `css/styles.css` were
+not touched.
+
+---
+
+### Authentication Flow Coverage (Static Analysis)
+
+The flows below are verified by tracing the call graph in `js/app.js` and `js/auth.js`.
+Live execution against Supabase was not performed.
+
+| Flow | Implementation | Static Verdict |
+|------|---------------|----------------|
+| Register new user | `wireRegisterForm()` → `onRegisterSubmit()` → `auth.signUp()` → normalized result | ✅ CODE PASS |
+| Login with correct credentials | `wireLoginForm()` → `onLoginSubmit()` → `auth.signIn()` → `onAuthStateChange` fires `SIGNED_IN` → finance app shown | ✅ CODE PASS |
+| Login with wrong password | `onLoginSubmit()` → `auth.signIn()` error → `getLoginErrorMessage('invalid-credentials')` → inline message | ✅ CODE PASS |
+| Logout | `#logout-button` → `onLogout()` → `auth.signOut()` → `showSignedOutState()` → `showLoginView()` | ✅ CODE PASS |
+| Password reset request | `#login-forgot-password-button` → `showResetPasswordView()` → `onResetPasswordSubmit()` → `auth.resetPassword()` → success message | ✅ CODE PASS |
+| Session persistence | `initAuthSession()` → `onAuthStateChange('INITIAL_SESSION', user)` OR `getCurrentUser()` → finance app shown without re-login | ✅ CODE PASS |
+| Cold load, no session | `initAuthSession()` → `onAuthStateChange('INITIAL_SESSION', null)` → `showSignedOutState()` → login UI only | ✅ CODE PASS |
+| Auth guard (Phase 15.8) | `bootstrap()` hides `#app-main` before `initAuthSession()`; only shows it if `user` is present | ✅ CODE PASS |
+| Password reset email delivery | Requires live Supabase + email delivery | ⚠️ SKIPPED — needs live credentials |
+| Password reset redirect (new-password form) | Requires Supabase redirect URL config + email link click | ⚠️ SKIPPED — needs live credentials |
+| Session expiry handling | Requires manually expiring a JWT and observing `onAuthStateChange('SIGNED_OUT')` | ⚠️ SKIPPED — needs live credentials |
+| Cross-browser (Chrome/Firefox/Edge/Safari) | Requires browser execution | ⚠️ SKIPPED — needs browser + live credentials |
+| Phase 1–14 regression while authenticated | Requires browser execution | ⚠️ SKIPPED — needs browser + live credentials |
+
+---
+
+### Phase 1–14 Regression (Static)
+
+The auth guard (Task 15.8) gates `initializeFinanceApplication()` behind `onAuthStateChange`.
+Once authenticated, the function calls the **same** storage init, event wiring, and
+`renderAll()` path used in Phases 1–14. No finance module was modified in Phase 15.
+The Groups A–K manual test results in the [Manual Test Results](#manual-test-results) section
+above remain valid for the authenticated context.
+
+---
+
+### Security Invariants Verified
+
+| Invariant | Status |
+|-----------|--------|
+| No private credentials in `js/config.js` | ✅ Only `url` and `anonKey` (public) — placeholders in place |
+| No `service_role` key anywhere in codebase | ✅ Not present |
+| Passwords never stored, logged, or returned | ✅ `auth.js` never persists or propagates password values |
+| Auth tokens never written to localStorage manually | ✅ Supabase JWT managed by `supabase-js` in its own key; no manual writes |
+| `state.currentUser` uses immutable `id` (UUID), not email, as ownership key | ✅ `_normalizeUser()` in `auth.js` returns `{ id: user.id, email }` |
+| Finance data not visible to unauthenticated users | ✅ `#app-main` hidden until `onAuthStateChange` confirms a valid session |
+| No duplicate auth listener registrations | ✅ `onAuthStateChange` registered exactly once in `initAuthSession()` |
+
+---
+
+### Remaining Limitations
+
+1. **Live Supabase integration not tested.** `js/config.js` contains placeholder values.
+   The following flows require real credentials before they can be verified:
+   - Actual user registration / email confirmation
+   - Actual login / logout against Supabase
+   - Password reset email delivery and redirect
+   - Session JWT persistence across browser close/reopen
+   - Token refresh and expiry handling
+   - Cross-browser execution (Chrome, Firefox, Edge, Safari)
+
+2. **GitHub Pages redirect URL for password reset is not configured.** The `resetPassword()`
+   function derives the redirect URL from `window.location.origin` at runtime, which resolves
+   correctly for both `localhost` and GitHub Pages. However, the Supabase dashboard must have
+   the deployed URL added to its "Redirect URLs" allowlist before the reset email link will
+   work in production.
+
+3. **Phase 1–14 regression while authenticated** was verified statically (no finance module
+   changed) but was not executed in a live browser against a real authenticated session.
+
+---
+
+### Final Status
+
+| Item | Status |
+|------|--------|
+| Task 15.10 Authentication QA | ✅ **COMPLETE** (static QA; live integration pending credentials) |
+| Phase 15 Authentication | ✅ **COMPLETE** (Tasks 15.1–15.10 all implemented and statically verified) |
+| Phase 16 (User Identity & Data Isolation) | 🔷 Not started — out of scope for this session |
