@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Personal Finance Tracker — record income and expenses, track your balance, and analyze spending by category. All data stays in your browser.">
+  <meta name="description" content="Personal Finance Tracker â€” record income and expenses, track your balance, and analyze spending by category. All data stays in your browser.">
   <title>Personal Finance Tracker</title>
   <link rel="stylesheet" href="css/styles.css">
   <!--
@@ -20,6 +20,10 @@
     <h1 class="app-title">Personal Finance Tracker</h1>
     <nav class="app-header__nav" aria-label="Account">
       <button type="button" id="show-register-button" class="btn-secondary btn-sm">Create account</button>
+      <button type="button" id="show-login-button" class="btn-secondary btn-sm">Sign in</button>
+      <span class="auth-signed-in" id="auth-signed-in" hidden aria-live="polite">
+        <span class="auth-signed-in__email" id="auth-signed-in-email"></span>
+      </span>
     </nav>
   </header>
 
@@ -64,7 +68,47 @@
         <p class="auth-success__message" id="register-success-message"></p>
       </div>
       <p class="auth-card__footer">
-        <button type="button" id="register-back-button" class="btn-link">← Back to app</button>
+        <button type="button" id="register-back-button" class="btn-link">â† Back to app</button>
+      </p>
+    </div>
+  </section>
+
+  <!-- Login section: sibling of <main>, shown/hidden by JS (Task 15.4) -->
+  <section class="auth-section" id="login-section" aria-labelledby="login-heading" hidden>
+    <div class="auth-card">
+      <h2 class="auth-card__heading" id="login-heading">Sign in</h2>
+      <form class="auth-form" id="login-form" novalidate>
+        <!-- email field -->
+        <div class="form-field">
+          <label for="login-email">Email address</label>
+          <input type="email" id="login-email" name="email" autocomplete="email"
+                 inputmode="email" aria-describedby="login-email-error" required>
+          <span class="field-error" id="login-email-error" data-field-error="email"
+                role="alert" aria-live="polite"></span>
+        </div>
+        <!-- password field -->
+        <div class="form-field">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" name="password"
+                 autocomplete="current-password" aria-describedby="login-password-error" required>
+          <span class="field-error" id="login-password-error" data-field-error="password"
+                role="alert" aria-live="polite"></span>
+        </div>
+        <!-- form-level message -->
+        <p class="form-error" id="login-form-error" role="alert" aria-live="polite"></p>
+        <!-- submit -->
+        <div class="form-actions">
+          <button type="submit" id="login-submit-button">Sign in</button>
+        </div>
+      </form>
+      <!-- success state (hidden until login succeeds) -->
+      <div class="auth-success" id="login-success" hidden>
+        <p class="auth-success__message" id="login-success-message"></p>
+      </div>
+      <p class="auth-card__footer">
+        <button type="button" id="login-back-button" class="btn-link">← Back to app</button>
+        &nbsp;·&nbsp;
+        <button type="button" id="login-to-register-button" class="btn-link">Create account</button>
       </p>
     </div>
   </section>
@@ -101,7 +145,7 @@
       </div>
     </section>
 
-    <!-- Recent transactions (Dashboard): most recent transactions, newest→oldest -->
+    <!-- Recent transactions (Dashboard): most recent transactions, newestâ†’oldest -->
     <section class="section recent-transactions-section" id="recent-transactions-section" aria-labelledby="recent-transactions-heading" hidden>
       <h2 class="section-heading" id="recent-transactions-heading">Recent Transactions</h2>
       <ul class="transaction-list recent-transactions-list" id="recent-transactions-list"></ul>
@@ -180,7 +224,7 @@
     <!-- Charts: expense-by-category and income-by-category canvases -->
     <section class="section charts-section" id="charts-section" aria-labelledby="charts-heading" hidden>
       <h2 class="section-heading" id="charts-heading">Charts</h2>
-      <!-- chart-row: single column on mobile; 2-column side-by-side on ≥600px (task 9.2) -->
+      <!-- chart-row: single column on mobile; 2-column side-by-side on â‰¥600px (task 9.2) -->
       <div class="chart-row">
         <div class="chart-container" id="expense-chart-container">
           <h3 class="chart-container__heading">Expenses by category</h3>
@@ -281,3 +325,4 @@
   </footer>
 </body>
 </html>
+

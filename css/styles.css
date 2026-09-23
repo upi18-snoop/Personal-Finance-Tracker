@@ -1,4 +1,4 @@
-/*
+﻿/*
  * styles.css — Presentation layer (Task 1.2: mobile-first CSS foundation).
  *
  * Scope of this task:
@@ -1172,4 +1172,32 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+}
+
+
+/* ==========================================================================
+   Authentication UI — Task 15.4 (Login & signed-in state)
+   ========================================================================== */
+
+/*
+ * .auth-signed-in — shown in the header nav after a successful login.
+ * Displays the authenticated user's email address as a visual indicator
+ * that a session is active. Hidden by default; JS toggles hidden attr.
+ */
+.auth-signed-in {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.auth-signed-in__email {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  /* Prevent very long addresses from breaking the header layout */
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

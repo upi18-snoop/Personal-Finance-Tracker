@@ -948,7 +948,7 @@ broken or removed.
       - Invalid input shows the appropriate inline messages without submitting.
     - **Dependencies:** 15.2
 
-  - [ ] 15.4 Email Login UI
+  - [x] 15.4 Email Login UI
     - **Objective:** Add a login form, wire it to `auth.signIn()`, and handle error states.
     - **Requirements covered:** 19.2
     - **Files:** `index.html`, `js/app.js`, `css/styles.css`

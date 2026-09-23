@@ -1,17 +1,17 @@
-/*
- * app.js — UI glue / entry point (ES module).
+﻿/*
+ * app.js â€” UI glue / entry point (ES module).
  *
  * Single responsibility: bootstrap the app, hold the lightweight shared app
  * state (selectedMonth reporting scope + filterCriteria list scope), wire DOM
  * events, and orchestrate re-renders. The ONLY module that knows about all UI
  * modules; it also drives business logic and storage init.
  *
- * Layer: UI glue / entry point. May import everything — the storage layer, the
+ * Layer: UI glue / entry point. May import everything â€” the storage layer, the
  * business logic layer, the UI render layer, and utils.
  *
  * NOTE: In task 1.3 bootstrap() only imports the module graph and logs
  * readiness. Real event wiring and render orchestration arrive across Phases
- * 3–8 (tasks 3.3, 3.5, 4.x, 5.2, 6.3, 6.4, 8.3, ...).
+ * 3â€“8 (tasks 3.3, 3.5, 4.x, 5.2, 6.3, 6.4, 8.3, ...).
  */
 
 import * as storage from "./storage.js";
@@ -38,7 +38,7 @@ function currentMonthKey() {
 }
 
 /**
- * Lightweight app state — the only mutable shared state.
+ * Lightweight app state â€” the only mutable shared state.
  *  - selectedMonth: reporting scope (Dashboard month, Monthly_Summary, charts)
  *  - filterCriteria: list scope (drives only the Transaction_List)
  *  - selectedCurrency: active ISO 4217 currency code for all formatted money
@@ -76,7 +76,7 @@ function clearTransactionFormErrors(form) {
 
 /**
  * Render validation errors inline, each next to its associated field
- * (Req 2.4–2.8, 15.2). Falls back to the form-level message for any error whose
+ * (Req 2.4â€“2.8, 15.2). Falls back to the form-level message for any error whose
  * field has no dedicated slot.
  * @param {HTMLFormElement} form
  * @param {{ field: string, message: string }[]} errors
@@ -129,8 +129,8 @@ function resetTransactionForm(form) {
  *
  * On success, calls `renderAll()` which triggers the full reporting-scope
  * re-render path: dashboard totals, Monthly_Summary, and both category charts
- * (expense + income) via `renderReports()` → `charts.updateExpenseChart /
- * updateIncomeChart`. Charts update in-place via `chart.update()` — no
+ * (expense + income) via `renderReports()` â†’ `charts.updateExpenseChart /
+ * updateIncomeChart`. Charts update in-place via `chart.update()` â€” no
  * destroy/recreate, no duplicate instances (Req 6.3, 16.2).
  * @param {{ type: string, itemName: string, amount: string, category: string, date: string }} formData
  * @param {HTMLFormElement} form
@@ -157,8 +157,8 @@ function onAddTransaction(formData, form) {
 }
 
 /**
- * Wire the add-transaction form's events: submit → onAddTransaction, and
- * type change → refresh the Category options for that type (Req 2.3). Seeds the
+ * Wire the add-transaction form's events: submit â†’ onAddTransaction, and
+ * type change â†’ refresh the Category options for that type (Req 2.3). Seeds the
  * initial category options and a sensible default date on load.
  * @returns {void}
  */
@@ -209,9 +209,9 @@ function wireTransactionForm() {
  * ------------------------------------------------------------------------ */
 
 /**
- * Render the Transaction_List for the current state (Req 3.1, 3.2, 4.1–4.13).
+ * Render the Transaction_List for the current state (Req 3.1, 3.2, 4.1â€“4.13).
  * Applies the active filter scope (`state.filterCriteria`) via the pure
- * `filterTransactions` view function — a read-only operation that NEVER mutates
+ * `filterTransactions` view function â€” a read-only operation that NEVER mutates
  * stored data (Req 4.12, 4.14). The dashboard totals and Monthly_Summary are
  * completely unaffected because this function does NOT call renderDashboard,
  * renderReports, or saveData (Req 4.12).
@@ -231,8 +231,8 @@ function renderTransactionList() {
   const filtered = transactions.filterTransactions(all, state.filterCriteria);
 
   // Determine the correct empty-state message (Req 4.13):
-  //   - Transactions exist but none match → Filtered_Empty_State message.
-  //   - No transactions at all → generic no-data message (dashboard.js default).
+  //   - Transactions exist but none match â†’ Filtered_Empty_State message.
+  //   - No transactions at all â†’ generic no-data message (dashboard.js default).
   const emptyMessage =
     all.length > 0 && filtered.length === 0
       ? "No transactions match your filters."
@@ -243,11 +243,11 @@ function renderTransactionList() {
 }
 
 /* --------------------------------------------------------------------------
- * Filter / search controls — list scope (task 6.3)
+ * Filter / search controls â€” list scope (task 6.3)
  *
  * The filter scope is completely independent of the reporting scope. Changing
- * any filter criterion updates ONLY the Transaction_List — it never calls
- * renderDashboard, renderReports, or saveData — so the Dashboard totals and
+ * any filter criterion updates ONLY the Transaction_List â€” it never calls
+ * renderDashboard, renderReports, or saveData â€” so the Dashboard totals and
  * Monthly_Summary are structurally guaranteed to be unaffected (Req 4.12, 4.14).
  *
  * All four controls (search, type, category, month) are wired to the single
@@ -302,7 +302,7 @@ function populateCategoryFilter() {
   const previous = selectEl.value;
   selectEl.replaceChildren();
 
-  // "All categories" sentinel — means no category filter active.
+  // "All categories" sentinel â€” means no category filter active.
   const allOpt = document.createElement("option");
   allOpt.value = ALL_CATEGORIES_VALUE;
   allOpt.textContent = "All categories";
@@ -324,8 +324,8 @@ function populateCategoryFilter() {
 /**
  * Read the current filter control values and update `state.filterCriteria`,
  * then call `renderTransactionList()` ONLY (Req 4.9, 4.12). This is the full
- * extent of what a filter change does — no saveData, no dashboard re-render,
- * no report/chart re-render — so Dashboard totals and Monthly_Summary can
+ * extent of what a filter change does â€” no saveData, no dashboard re-render,
+ * no report/chart re-render â€” so Dashboard totals and Monthly_Summary can
  * never move as a result of filtering (Req 4.12, 4.14).
  * @returns {void}
  */
@@ -351,10 +351,10 @@ function onFilterChange() {
  * showing all stored transactions (Req 4.10, 4.11).
  *
  * Resets:
- *   - Search_Term → "" (empty)
- *   - type filter → "all"
- *   - Category filter → "" (no category selected)
- *   - month filter → "" (no month filter active)
+ *   - Search_Term â†’ "" (empty)
+ *   - type filter â†’ "all"
+ *   - Category filter â†’ "" (no category selected)
+ *   - month filter â†’ "" (no month filter active)
  *
  * Also resets the filter form controls to match the cleared state, so the UI
  * reflects the defaults immediately. Calls `renderTransactionList()` which is
@@ -421,8 +421,8 @@ function wireFilterControls() {
 /* --------------------------------------------------------------------------
  * Reporting re-render orchestration (task 4.2)
  *
- * renderAll() re-renders every view affected by a reporting-scope change — a
- * transaction being added or deleted — for the current app state. Per the
+ * renderAll() re-renders every view affected by a reporting-scope change â€” a
+ * transaction being added or deleted â€” for the current app state. Per the
  * design it eventually covers dashboard + reports + charts + the list; for now
  * only the dashboard and the Transaction_List exist, so those are what it
  * drives. Monthly_Summary (reports.renderMonthlySummary) and chart updates are
@@ -460,15 +460,15 @@ function formatMoney(amount) {
  *     duplicate chart objects are ever created and no memory leaks occur.
  *   - The instances were created once in `bootstrap()` via `charts.initCharts()`.
  *   - If an instance is somehow null (canvas absent at boot), `update*` lazily calls
- *     `initCharts()` which destroys any stale instance before creating a fresh one —
+ *     `initCharts()` which destroys any stale instance before creating a fresh one â€”
  *     the destroy-before-create contract is enforced inside `charts.js`.
  *
- * It deliberately does NOT touch the Transaction_List — that belongs to the
+ * It deliberately does NOT touch the Transaction_List â€” that belongs to the
  * independent filter scope (Req 4.12 / 5.9).
  * @returns {void}
  */
 function renderReports() {
-  // Monthly_Summary for the Selected_Month (Req 5.3–5.8). Pass the active
+  // Monthly_Summary for the Selected_Month (Req 5.3â€“5.8). Pass the active
   // Selected_Currency so all amounts are formatted consistently (Req 9.6, 18.7).
   reports.renderMonthlySummary(state.selectedMonth, state.selectedCurrency);
 
@@ -553,16 +553,16 @@ function addDeleteControls() {
 }
 
 /**
- * Handle a request to delete the transaction with the given id (Req 3.3–3.6).
+ * Handle a request to delete the transaction with the given id (Req 3.3â€“3.6).
  * Requires a confirmation interaction first: on cancel the transaction is
  * retained unchanged and nothing is persisted (Req 3.4); on confirm the
  * deletion is delegated to the business logic layer (which persists the updated
  * set, Req 3.5/3.6) and the Transaction_List is re-rendered.
  *
  * On confirm + success, calls `renderAll()` which triggers the full reporting-scope
- * re-render path including both category charts via `renderReports()` →
+ * re-render path including both category charts via `renderReports()` â†’
  * `charts.updateExpenseChart / updateIncomeChart`. Charts update in-place via
- * `chart.update()` — no destroy/recreate, no duplicate instances (Req 6.4, 16.2).
+ * `chart.update()` â€” no destroy/recreate, no duplicate instances (Req 6.4, 16.2).
  * @param {string} id
  * @returns {{ ok: boolean }}
  */
@@ -571,7 +571,7 @@ function onDeleteTransaction(id) {
     return { ok: false };
   }
 
-  // Confirmation interaction (Req 3.3). Cancel → retain unchanged (Req 3.4).
+  // Confirmation interaction (Req 3.3). Cancel â†’ retain unchanged (Req 3.4).
   const confirmed = window.confirm(
     "Delete this transaction? This cannot be undone."
   );
@@ -579,7 +579,7 @@ function onDeleteTransaction(id) {
     return { ok: false };
   }
 
-  // Confirmed → remove + persist via business logic (Req 3.5, 3.6).
+  // Confirmed â†’ remove + persist via business logic (Req 3.5, 3.6).
   const result = transactions.deleteTransaction(id);
 
   // Reflect the removal across the reporting views and the list: the dashboard
@@ -615,7 +615,7 @@ function wireTransactionListDeletion() {
 }
 
 /* --------------------------------------------------------------------------
- * Month selector — reporting scope (task 5.2)
+ * Month selector â€” reporting scope (task 5.2)
  *
  * The Selected_Month drives the reporting scope only: the Monthly_Summary and
  * the category charts (and the Dashboard month label). Changing it recomputes
@@ -627,15 +627,15 @@ function wireTransactionListDeletion() {
 
 /**
  * Handle a change to the Selected_Month (Req 5.1, 5.9). Updates the reporting
- * scope in app state and recomputes the month-scoped reporting views — the
- * Monthly_Summary and category charts — for the new month, plus the Dashboard's
+ * scope in app state and recomputes the month-scoped reporting views â€” the
+ * Monthly_Summary and category charts â€” for the new month, plus the Dashboard's
  * Selected_Month label. Deliberately leaves the Transaction_List untouched: the
  * list is driven by the separate filter scope, so a reporting-month change
  * never moves it (Req 5.9).
  *
  * Both category charts update in-place via `chart.update()` through
- * `renderReports()` → `charts.updateExpenseChart / updateIncomeChart`. No
- * destroy/recreate occurs for a month change — no duplicate instances or leaks
+ * `renderReports()` â†’ `charts.updateExpenseChart / updateIncomeChart`. No
+ * destroy/recreate occurs for a month change â€” no duplicate instances or leaks
  * (Req 6.5, 16.2).
  *
  * A blank month (e.g. the user clears the native picker) falls back to the
@@ -675,7 +675,7 @@ function wireMonthSelector() {
 }
 
 /* --------------------------------------------------------------------------
- * Currency selector — Settings section (task 14.3)
+ * Currency selector â€” Settings section (task 14.3)
  *
  * The currency selector is a presentation-only control: changing it updates
  * state.selectedCurrency, persists the choice via storage.setCurrency, and
@@ -684,13 +684,13 @@ function wireMonthSelector() {
  *
  * This mirrors the month-selector's reporting-scope pattern: changing the
  * currency triggers a full re-render of every formatted view, but no data is
- * mutated — it is purely a display preference (Req 9.3).
+ * mutated â€” it is purely a display preference (Req 9.3).
  * ------------------------------------------------------------------------ */
 
 /**
  * Populate the currency `<select>` with one `<option>` per entry in
  * `SUPPORTED_CURRENCIES` (Req 18.1). Each option displays the currency code
- * and its human-readable label (e.g., "USD — US Dollar"). Option text is set
+ * and its human-readable label (e.g., "USD â€” US Dollar"). Option text is set
  * via textContent (never innerHTML). The active Selected_Currency is pre-selected.
  * @returns {void}
  */
@@ -703,7 +703,7 @@ function populateCurrencySelect() {
   for (const [code, meta] of Object.entries(utils.SUPPORTED_CURRENCIES)) {
     const opt = document.createElement("option");
     opt.value = code;
-    opt.textContent = `${code} — ${meta.label}`;
+    opt.textContent = `${code} â€” ${meta.label}`;
     selectEl.appendChild(opt);
   }
 
@@ -714,12 +714,12 @@ function populateCurrencySelect() {
 /**
  * Handle a currency change from the Settings selector (Req 18.6, 18.7).
  *
- * Persists the choice via storage.setCurrency (which validates the code —
+ * Persists the choice via storage.setCurrency (which validates the code â€”
  * unknown codes are rejected silently). Updates state.selectedCurrency and
  * triggers a full reporting-style re-render of every currency-formatted surface:
  * dashboard totals (Total_Balance / Total_Income / Total_Expense), the
  * Monthly_Summary, the category charts, and the Transaction_List. NO stored
- * transaction amounts are modified — this is presentation only (Req 9.3, 18.7).
+ * transaction amounts are modified â€” this is presentation only (Req 9.3, 18.7).
  *
  * The render path is identical to what happens after a month change or
  * add/delete: renderAll() covers every formatted surface atomically so no
@@ -763,7 +763,7 @@ function wireCurrencySelector() {
  * Category management (task 8.3)
  *
  * Renders the custom category list grouped by type (Expense then Income).
- * Default categories are shown with a "(default)" badge and no delete button —
+ * Default categories are shown with a "(default)" badge and no delete button â€”
  * they are read-only (Req 8.6). Custom categories show a labelled Delete button
  * so the user can remove them (Req 8.5).
  *
@@ -965,8 +965,8 @@ function onDeleteCategory(name, type) {
 }
 
 /**
- * Wire the category management form: submit → onAddCategory, and delegated
- * click on the category list → onDeleteCategory (Req 8.5, 8.6, 8.7, 15.2).
+ * Wire the category management form: submit â†’ onAddCategory, and delegated
+ * click on the category list â†’ onDeleteCategory (Req 8.5, 8.6, 8.7, 15.2).
  * The form inputs already have associated `<label>` elements in `index.html`
  * (Req 15.2). Uses event delegation on `#category-list` so dynamically-added
  * rows are covered without re-wiring.
@@ -1096,7 +1096,7 @@ function validateRegisterForm(values) {
     errors.push({ field: "email", message: "Please enter a valid email address." });
   }
 
-  // Password validation — Supabase default minimum is 6 characters
+  // Password validation â€” Supabase default minimum is 6 characters
   if (!values.password || values.password.length === 0) {
     errors.push({ field: "password", message: "Password is required." });
   } else if (values.password.length < 6) {
@@ -1187,7 +1187,7 @@ function onRegisterSubmit(event) {
     confirmPassword: confirmEl ? confirmEl.value : "",
   };
 
-  // 1. Client-side validation — do not call Supabase with bad input.
+  // 1. Client-side validation â€” do not call Supabase with bad input.
   const validationErrors = validateRegisterForm(values);
   if (validationErrors.length > 0) {
     showRegisterErrors(validationErrors);
@@ -1201,7 +1201,7 @@ function onRegisterSubmit(event) {
     utils.safeText(submitBtn, "Creating account\u2026");
   }
 
-  // 3. Delegate to auth.js — the only layer that knows about Supabase.
+  // 3. Delegate to auth.js â€” the only layer that knows about Supabase.
   //    Use a void-returning async IIFE so we don't need to make the handler async.
   (async () => {
     const result = await auth.signUp(values.email, values.password);
@@ -1214,7 +1214,7 @@ function onRegisterSubmit(event) {
       return;
     }
 
-    // Case B: email confirmation required — auth.js returns email-not-confirmed
+    // Case B: email confirmation required â€” auth.js returns email-not-confirmed
     // when Supabase creates the account but does not return a session yet.
     if (result.error && result.error.code === "email-not-confirmed") {
       showRegisterSuccess(
@@ -1225,7 +1225,7 @@ function onRegisterSubmit(event) {
       return;
     }
 
-    // Case C: provider error — show normalized message, re-enable button.
+    // Case C: provider error â€” show normalized message, re-enable button.
     const errorMessage = getRegisterErrorMessage(result.error);
     utils.safeText(document.getElementById("register-form-error"), errorMessage);
     if (submitBtn) {
@@ -1283,6 +1283,305 @@ function wireRegisterForm() {
   }
 }
 
+
+/* --------------------------------------------------------------------------
+ * Login (task 15.4)
+ *
+ * Self-contained login form handler. Mirrors the registration pattern from
+ * task 15.3. Does NOT modify bootstrap, renderAll, or any existing finance
+ * functionality. The login section (#login-section) is shown/hidden
+ * independently of the finance dashboard.
+ *
+ * Flow:
+ *   Login form → app.js (onLoginSubmit) → auth.signIn() → Supabase Auth
+ *
+ * No direct Supabase calls are made from this module.
+ * Task 15.8 will add the full auth guard; this task only handles the login
+ * form interaction and the immediate signed-in indication.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Show the login section and hide the finance dashboard.
+ * @returns {void}
+ */
+function showLoginView() {
+  const loginSection = document.getElementById('login-section');
+  const appMain = document.getElementById('app-main');
+  const registerSection = document.getElementById('register-section');
+  if (loginSection) loginSection.hidden = false;
+  if (appMain) appMain.hidden = true;
+  if (registerSection) registerSection.hidden = true;
+}
+
+/**
+ * Hide the login section and restore the finance dashboard.
+ * Also resets the login form so stale state is not visible on next open.
+ * @returns {void}
+ */
+function hideLoginView() {
+  const loginSection = document.getElementById('login-section');
+  const appMain = document.getElementById('app-main');
+  if (loginSection) loginSection.hidden = true;
+  if (appMain) appMain.hidden = false;
+  resetLoginForm();
+}
+
+/**
+ * Reset the login form to its empty default state.
+ * Clears all field values, validation messages, and the success block.
+ * @returns {void}
+ */
+function resetLoginForm() {
+  const form = document.getElementById('login-form');
+  if (form) form.reset();
+  clearLoginErrors();
+  const successEl = document.getElementById('login-success');
+  if (successEl) successEl.hidden = true;
+  const submitBtn = document.getElementById('login-submit-button');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    utils.safeText(submitBtn, 'Sign in');
+  }
+}
+
+/**
+ * Clear all inline validation messages on the login form.
+ * @returns {void}
+ */
+function clearLoginErrors() {
+  const form = document.getElementById('login-form');
+  if (!form) return;
+  for (const el of form.querySelectorAll('[data-field-error]')) {
+    utils.safeText(el, '');
+  }
+  utils.safeText(document.getElementById('login-form-error'), '');
+}
+
+/**
+ * Validate login form input before calling auth.signIn().
+ * Returns an array of { field, message } errors. Empty array means valid.
+ *
+ * Rules:
+ *   - email: required, must pass basic format check
+ *   - password: required (non-empty)
+ *
+ * @param {{ email: string, password: string }} values
+ * @returns {{ field: string, message: string }[]}
+ */
+function validateLoginForm(values) {
+  const errors = [];
+
+  if (!values.email || values.email.trim() === '') {
+    errors.push({ field: 'email', message: 'Email address is required.' });
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) {
+    errors.push({ field: 'email', message: 'Please enter a valid email address.' });
+  }
+
+  if (!values.password || values.password.length === 0) {
+    errors.push({ field: 'password', message: 'Password is required.' });
+  }
+
+  return errors;
+}
+
+/**
+ * Display inline validation errors on the login form.
+ * Unrecognized field names fall through to the form-level error element.
+ * @param {{ field: string, message: string }[]} errors
+ * @returns {void}
+ */
+function showLoginErrors(errors) {
+  clearLoginErrors();
+  const form = document.getElementById('login-form');
+  if (!form) return;
+  const unassigned = [];
+  for (const error of errors) {
+    const slot = form.querySelector(`[data-field-error="${error.field}"]`);
+    if (slot) {
+      utils.safeText(slot, error.message);
+    } else {
+      unassigned.push(error.message);
+    }
+  }
+  if (unassigned.length > 0) {
+    utils.safeText(
+      document.getElementById('login-form-error'),
+      unassigned.join(' ')
+    );
+  }
+}
+
+/**
+ * Map a normalized auth error to a user-friendly login message.
+ * Passwords are never included in error messages.
+ * @param {{ code: string, message: string } | undefined} error
+ * @returns {string}
+ */
+function getLoginErrorMessage(error) {
+  if (!error) return 'Sign-in failed. Please try again.';
+  switch (error.code) {
+    case 'invalid-credentials':
+      return 'Incorrect email or password. Please try again.';
+    case 'invalid-email':
+      return 'Please enter a valid email address.';
+    case 'email-not-confirmed':
+      return 'Please confirm your email address before signing in. Check your inbox for the confirmation link.';
+    case 'user-not-found':
+      return 'No account found with this email address.';
+    case 'rate-limited':
+      return 'Too many attempts. Please wait a moment and try again.';
+    case 'network-error':
+      return 'Network error. Please check your connection and try again.';
+    case 'not-configured':
+      return 'Authentication is not configured yet. Please add your Supabase credentials to js/config.js.';
+    default:
+      return 'Sign-in failed. Please try again.';
+  }
+}
+
+/**
+ * Update the header to reflect a signed-in state.
+ * Shows the authenticated email and hides the Sign in / Create account buttons.
+ * Passwords are never stored, logged, or shown — only the email is displayed.
+ *
+ * This is the basic signed-in indication for Task 15.4. The full authenticated
+ * header (with a logout button) is implemented in Task 15.5.
+ *
+ * @param {string} email  The authenticated user's email address.
+ * @returns {void}
+ */
+function showSignedInState(email) {
+  const signedInBadge = document.getElementById('auth-signed-in');
+  const signedInEmail = document.getElementById('auth-signed-in-email');
+  const showLoginBtn = document.getElementById('show-login-button');
+  const showRegisterBtn = document.getElementById('show-register-button');
+
+  if (signedInEmail) utils.safeText(signedInEmail, email);
+  if (signedInBadge) signedInBadge.hidden = false;
+  if (showLoginBtn) showLoginBtn.hidden = true;
+  if (showRegisterBtn) showRegisterBtn.hidden = true;
+}
+
+/**
+ * Handle login form submission (task 15.4).
+ *
+ * Flow:
+ *   1. Read form values.
+ *   2. Run client-side validation (empty/format checks).
+ *   3. If invalid: show inline errors, do not call auth.signIn().
+ *   4. If valid: disable button, show loading state, call auth.signIn().
+ *   5. On success: show success state and display the authenticated email.
+ *   6. On error: show normalized error message, re-enable button.
+ *
+ * Passwords are NEVER logged, stored, or returned to callers.
+ *
+ * @param {Event} event
+ * @returns {void}
+ */
+function onLoginSubmit(event) {
+  event.preventDefault();
+
+  const form = document.getElementById('login-form');
+  if (!form) return;
+
+  const emailEl = document.getElementById('login-email');
+  const passwordEl = document.getElementById('login-password');
+  const submitBtn = document.getElementById('login-submit-button');
+
+  const values = {
+    email: emailEl ? emailEl.value : '',
+    password: passwordEl ? passwordEl.value : '',
+  };
+
+  // 1. Client-side validation — do not call Supabase with invalid input.
+  const validationErrors = validateLoginForm(values);
+  if (validationErrors.length > 0) {
+    showLoginErrors(validationErrors);
+    return;
+  }
+
+  // 2. Clear previous errors and enter loading state.
+  clearLoginErrors();
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    utils.safeText(submitBtn, 'Signing in\u2026');
+  }
+
+  // 3. Delegate to auth.js — the only layer that knows about Supabase.
+  //    Use a void-returning async IIFE to avoid making the handler async.
+  (async () => {
+    // NOTE: password variable is not referenced after this call and is never
+    // stored, logged, or propagated anywhere in the response.
+    const result = await auth.signIn(values.email, values.password);
+
+    if (result.ok) {
+      // Login succeeded: show success message and basic signed-in indication.
+      const successEl = document.getElementById('login-success');
+      const successMsg = document.getElementById('login-success-message');
+      if (successMsg) {
+        utils.safeText(
+          successMsg,
+          'Signed in as ' + result.user.email + '. Welcome back!'
+        );
+      }
+      if (successEl) successEl.hidden = false;
+
+      // Update header to show the authenticated email.
+      showSignedInState(result.user.email);
+
+      // Restore the finance dashboard in the background (the login view will
+      // still be visible showing the success message; Task 15.8 will handle
+      // the full automated transition to the protected dashboard).
+      const appMain = document.getElementById('app-main');
+      if (appMain) appMain.hidden = false;
+
+      return;
+    }
+
+    // Login failed: map to a user-friendly message and re-enable the button.
+    const errorMessage = getLoginErrorMessage(result.error);
+    utils.safeText(document.getElementById('login-form-error'), errorMessage);
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      utils.safeText(submitBtn, 'Sign in');
+    }
+  })();
+}
+
+/**
+ * Wire the login form and navigation buttons (task 15.4).
+ * Attaches to #login-form, #show-login-button, #login-back-button,
+ * and #login-to-register-button.
+ * @returns {void}
+ */
+function wireLoginForm() {
+  const form = document.getElementById('login-form');
+  if (form) {
+    form.addEventListener('submit', onLoginSubmit);
+  }
+
+  // "Sign in" button in the header opens the login view.
+  const showLoginBtn = document.getElementById('show-login-button');
+  if (showLoginBtn) {
+    showLoginBtn.addEventListener('click', showLoginView);
+  }
+
+  // "← Back to app" closes the login view without doing anything.
+  const backBtn = document.getElementById('login-back-button');
+  if (backBtn) {
+    backBtn.addEventListener('click', hideLoginView);
+  }
+
+  // "Create account" link inside the login view switches to the register view.
+  const toRegisterBtn = document.getElementById('login-to-register-button');
+  if (toRegisterBtn) {
+    toRegisterBtn.addEventListener('click', () => {
+      hideLoginView();
+      showRegisterView();
+    });
+  }
+}
+
 /**
  * Bootstrap the app on load. Initializes storage, then wires the UI event
  * handlers implemented so far (task 3.3 wires the add-transaction form). Render
@@ -1303,7 +1602,7 @@ function bootstrap() {
   wireTransactionListDeletion();
 
   // Month selector: default to the current month and re-render reports/charts
-  // on change — reporting scope only, never the list (task 5.2, Req 5.1/5.9).
+  // on change â€” reporting scope only, never the list (task 5.2, Req 5.1/5.9).
   wireMonthSelector();
 
   // Filter/search controls for the Transaction_List (task 6.3, Req 4.1, 4.9).
@@ -1317,7 +1616,7 @@ function bootstrap() {
 
   // Category management UI (task 8.3, Req 8.5). Wire the add-category form and
   // the delegated delete on the category list. Initial render of the list
-  // happens via renderCategoryList() inside wireCategoryForm setup — called
+  // happens via renderCategoryList() inside wireCategoryForm setup â€” called
   // explicitly here so the panel is populated on first paint.
   wireCategoryForm();
   renderCategoryList();
@@ -1331,8 +1630,11 @@ function bootstrap() {
   // Registration form (task 15.3, Req 19.1).
   wireRegisterForm();
 
+  // Login form (task 15.4, Req 19.2).
+  wireLoginForm();
+
   // Initial paint of every current view for the persisted state: the Dashboard
-  // (totals, count, Selected_Month, recent transactions — task 4.1,
+  // (totals, count, Selected_Month, recent transactions â€” task 4.1,
   // Req 1.1/1.2/1.4/1.5/1.8) and the Transaction_List (Req 3.1). renderAll is
   // also the single re-render path used on add/delete (task 4.2).
   renderAll();
