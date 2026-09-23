@@ -542,6 +542,25 @@
         "chatSessionId": "sess_c150e80f-ca1c-418d-b5e0-f954c778600c",
         "timestamp": 1790137687480
       }
+    ],
+    "14.4 Thread Selected_Currency (+locale) through the render layer": [
+      {
+        "executionId": "cad23351-f9da-404b-9173-b459d1caf97a",
+        "chatSessionId": "sess_6840f4e7-3cf9-4f8c-97b1-9936e2089281",
+        "timestamp": 1790138702576
+      },
+      {
+        "executionId": "cad23351-f9da-404b-9173-b459d1caf97a",
+        "chatSessionId": "sess_6840f4e7-3cf9-4f8c-97b1-9936e2089281",
+        "timestamp": 1790138826456
+      }
+    ],
+    "14. Configurable single currency (Selected_Currency across all displayed money)": [
+      {
+        "executionId": "cad23351-f9da-404b-9173-b459d1caf97a",
+        "chatSessionId": "sess_6840f4e7-3cf9-4f8c-97b1-9936e2089281",
+        "timestamp": 1790138826608
+      }
     ]
   }
 }

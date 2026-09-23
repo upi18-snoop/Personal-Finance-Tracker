@@ -758,7 +758,8 @@ function wireCurrencySelector() {
   });
 }
 
-
+/* --------------------------------------------------------------------------
+ * Category management (task 8.3)
  *
  * Renders the custom category list grouped by type (Expense then Income).
  * Default categories are shown with a "(default)" badge and no delete button —
