@@ -28,6 +28,11 @@
     </nav>
   </header>
 
+  <!-- Auth loading state: shown during bootstrap auth resolution, removed by JS -->
+  <div id="auth-loading" aria-live="polite" aria-label="Loading authentication state" hidden>
+    <span>Loading…</span>
+  </div>
+
   <!-- Registration section: sibling of <main>, shown/hidden by JS (Task 15.3) -->
   <section class="auth-section" id="register-section" aria-labelledby="register-heading" hidden>
     <div class="auth-card">

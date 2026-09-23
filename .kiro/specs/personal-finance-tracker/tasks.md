@@ -7,16 +7,16 @@ verifiable coding tasks for a **client-side-only** web application built with HT
 Vanilla JavaScript (ES modules), the browser `localStorage` API, and Chart.js (loaded from a CDN).
 
 No frameworks (React/Vue/Angular), no backend, no database, no build step, and
-no dependencies beyond Chart.js are used for the original v1 scope (Phase 1�14). Google Sheets
+no dependencies beyond Chart.js are used for the original v1 scope (Phase 1?14). Google Sheets
 synchronization is **out of scope for v1** and is only documented as a future extension point (the
 `GoogleSheetsProvider` placeholder), never implemented.
 
 > **Scope extension:** Phase 15 adds optional Supabase authentication (email/password). This is an
-> intentional, explicitly approved extension beyond the original v1 scope. Phase 1�14 functionality
-> is fully preserved and unchanged. Authentication does NOT imply cloud finance data storage �
+> intentional, explicitly approved extension beyond the original v1 scope. Phase 1?14 functionality
+> is fully preserved and unchanged. Authentication does NOT imply cloud finance data storage ?
 > that is planned for Phase 16.
 
-Tasks follow the design's strict layering (UI → business logic → storage) and top-level file
+Tasks follow the design's strict layering (UI ? business logic ? storage) and top-level file
 structure (`index.html`, `css/styles.css`, `js/*.js`). Each task builds on the previous one and ends
 with wiring things together, so no orphaned code is left behind. Where a task validates a design
 correctness property, the property is referenced explicitly.
@@ -49,7 +49,7 @@ Acceptance criteria, and Dependencies.
 The implementation tasks are organized into the phases below. Task IDs and numbering are stable
 across the document (dependency graph and coverage matrix reference them directly).
 
-### Phase 1 — Project Foundation
+### Phase 1 � Project Foundation
 
 - [x] 1. Project foundation: HTML shell, CSS foundation, JS module scaffolding
   - [x] 1.1 Create the semantic HTML shell and static structure
@@ -98,7 +98,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 2 — Data and Storage
+### Phase 2 � Data and Storage
 
 - [x] 2. Data model and storage layer with recovery and provider abstraction
   - [x] 2.1 Define the data model and utility leaf helpers
@@ -107,7 +107,7 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Files:** `js/utils.js`
     - **Implementation details:**
       - Implement `formatCurrency(amount, currency = "IDR")` using `Intl.NumberFormat('id-ID', ...)` to produce strings like `Rp 1.500.000` (period thousands separator, `Rp` symbol); parameterized by currency for future currencies with no caller changes.
-      - Implement `generateId()` (e.g., `crypto.randomUUID()`), `isValidDate(dateStr)`, `getMonthKey(dateStr)` (→ `"YYYY-MM"`), `isInMonth(dateStr, monthKey)`, `isBlank(str)`, and `safeText(node, value)` (sets `textContent`, never `innerHTML`).
+      - Implement `generateId()` (e.g., `crypto.randomUUID()`), `isValidDate(dateStr)`, `getMonthKey(dateStr)` (? `"YYYY-MM"`), `isInMonth(dateStr, monthKey)`, `isBlank(str)`, and `safeText(node, value)` (sets `textContent`, never `innerHTML`).
       - Keep all helpers pure: no DOM state, no storage access.
     - **Acceptance criteria:**
       - `formatCurrency(1500000)` returns `"Rp 1.500.000"`.
@@ -162,7 +162,7 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Implementation details:**
       - Define the `StorageProvider` interface (documented shape): `read()`, `write(data)`, `clear()` (async signatures to allow network-backed providers later).
       - Implement `LocalStorageProvider` wrapping `window.localStorage` as the active v1 provider; `loadData/saveData/clearData` use it.
-      - Add `GoogleSheetsProvider` as a **placeholder class only** — constructing it throws "Not implemented in v1". No sync logic, no network calls, no auth.
+      - Add `GoogleSheetsProvider` as a **placeholder class only** � constructing it throws "Not implemented in v1". No sync logic, no network calls, no auth.
       - Ensure business logic and UI depend only on `initializeData/loadData/saveData`, never on the provider class.
     - **Acceptance criteria:**
       - v1 persistence uses `LocalStorageProvider` and stores data only in the browser.
@@ -172,7 +172,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 3 — Transaction Management
+### Phase 3 � Transaction Management
 
 - [x] 3. Transaction business logic and list rendering
   - [x] 3.1 Implement transaction creation, validation, and money math
@@ -180,8 +180,8 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Requirements covered:** 1.5, 2.1, 2.2, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11
     - **Files:** `js/transactions.js`
     - **Implementation details:**
-      - Implement `addTransaction(input)` returning `{ ok: true, transaction }` or `{ ok: false, errors }`. Validate: type is `income`/`expense` (2.2, 2.4), item name non-blank via `isBlank` (2.5), amount is a number > 0 (2.6), category selected (2.7), date valid via `isValidDate` (2.8). On success build a `Transaction` with `id`, `type`, `itemName`, `amount`, `category`, `date`, `createdAt`, append, and persist via `storage.saveData` (2.9–2.11).
-      - Implement `getTransactions()` and `calculateTotals(transactions = getTransactions())` returning `{ totalIncome, totalExpense, balance: totalIncome - totalExpense, count }` — the only place money math is computed (1.5).
+      - Implement `addTransaction(input)` returning `{ ok: true, transaction }` or `{ ok: false, errors }`. Validate: type is `income`/`expense` (2.2, 2.4), item name non-blank via `isBlank` (2.5), amount is a number > 0 (2.6), category selected (2.7), date valid via `isValidDate` (2.8). On success build a `Transaction` with `id`, `type`, `itemName`, `amount`, `category`, `date`, `createdAt`, append, and persist via `storage.saveData` (2.9�2.11).
+      - Implement `getTransactions()` and `calculateTotals(transactions = getTransactions())` returning `{ totalIncome, totalExpense, balance: totalIncome - totalExpense, count }` � the only place money math is computed (1.5).
     - **Acceptance criteria:**
       - Valid input creates and persists a well-formed transaction; invalid input is rejected with a validation error and no state change.
       - `balance === totalIncome - totalExpense` for any transaction set.
@@ -228,20 +228,20 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 4 — Dashboard
+### Phase 4 � Dashboard
 
 - [x] 4. Dashboard rendering and reactivity
   - [x] 4.1 Render dashboard totals, selected month, count, and recent transactions
-    - **Objective:** Implement `renderDashboard` showing balance, income, expense, transaction count, the Selected_Month label, and recent transactions newest→oldest.
+    - **Objective:** Implement `renderDashboard` showing balance, income, expense, transaction count, the Selected_Month label, and recent transactions newest?oldest.
     - **Requirements covered:** 1.1, 1.2, 1.4, 1.5, 1.8
     - **Files:** `js/dashboard.js`, `js/app.js`, `index.html`, `css/styles.css`
     - **Implementation details:**
       - Read `calculateTotals()` over all transactions; render Total_Balance, Total_Income, Total_Expense, and count into the balance cards; format every money value via `formatCurrency` (1.8).
       - Display the current `state.selectedMonth` label.
-      - Implement `renderRecentTransactions(transactions)` ordering newest→oldest by `date` (1.4).
+      - Implement `renderRecentTransactions(transactions)` ordering newest?oldest by `date` (1.4).
       - Dashboard reads computed values only; it never computes money math itself.
     - **Acceptance criteria:**
-      - Dashboard displays balance/income/expense, month, count, and recent transactions ordered newest→oldest, all money values formatted.
+      - Dashboard displays balance/income/expense, month, count, and recent transactions ordered newest?oldest, all money values formatted.
     - **Dependencies:** 3.1, 1.2
 
   - [x] 4.2 Wire dashboard reactivity to add/delete state changes
@@ -256,7 +256,7 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Dependencies:** 4.1, 3.3, 3.5
 ---
 
-### Phase 5 — Monthly Reports
+### Phase 5 � Monthly Reports
 
 - [x] 5. Monthly summary with category analysis
   - [x] 5.1 Implement month-scoped reads and category totals in business logic
@@ -287,7 +287,7 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Requirements covered:** 5.3, 5.4, 5.5, 5.6
     - **Files:** `js/reports.js`, `index.html`, `css/styles.css`
     - **Implementation details:**
-      - Use `getTransactionsByMonth(monthKey)` + `calculateTotals()` to compute monthly income, expense, `Net_Balance` (income − expense for the month), and the monthly transaction count.
+      - Use `getTransactionsByMonth(monthKey)` + `calculateTotals()` to compute monthly income, expense, `Net_Balance` (income - expense for the month), and the monthly transaction count.
       - Format monetary values via `formatCurrency`.
     - **Acceptance criteria:**
       - Monthly summary shows correct income, expense, net balance, and count scoped to the selected month.
@@ -306,7 +306,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 6 — Transaction Search and Filters
+### Phase 6 � Transaction Search and Filters
 
 - [x] 6. Read-only search and filtering over the transaction list
   - [x] 6.1 Implement the pure filterTransactions view function
@@ -314,14 +314,14 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Requirements covered:** 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.14
     - **Files:** `js/transactions.js`
     - **Implementation details:**
-      - `filterTransactions(transactions, criteria)` applies: case-insensitive substring match on `itemName` (4.2), type `all`/`income`/`expense` (4.3–4.5), category equality (4.6), month membership (4.7), combined as AND (4.8).
+      - `filterTransactions(transactions, criteria)` applies: case-insensitive substring match on `itemName` (4.2), type `all`/`income`/`expense` (4.3�4.5), category equality (4.6), month membership (4.7), combined as AND (4.8).
       - Return a NEW array; never mutate, reorder, or write back (4.14).
     - **Acceptance criteria:**
       - Returns exactly the transactions satisfying all active criteria; input array is not mutated.
     - **Dependencies:** 3.1
 
   - [x] 6.3 Build filter/search controls and apply filters to the list only
-    - **Objective:** Add search term, type, category, and month filter controls that recompute the list immediately on change — affecting only the Transaction_List.
+    - **Objective:** Add search term, type, category, and month filter controls that recompute the list immediately on change � affecting only the Transaction_List.
     - **Requirements covered:** 4.1, 4.9, 4.12
     - **Files:** `index.html`, `js/app.js`, `css/styles.css`
     - **Implementation details:**
@@ -345,7 +345,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 7 — Charts
+### Phase 7 � Charts
 
 - [x] 7. Chart.js integration for category analysis
   - [x] 7.1 Integrate Chart.js and initialize chart canvases
@@ -395,7 +395,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 8 — Custom Categories
+### Phase 8 � Custom Categories
 
 - [x] 8. Custom category management
   - [x] 8.1 Implement category business logic (get, add, validate, delete rules)
@@ -426,7 +426,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 9 — Responsive UI
+### Phase 9 � Responsive UI
 
 - [x] 9. Responsive, touch-friendly layout
   - [x] 9.1 Implement mobile-first layout with no horizontal scroll
@@ -452,7 +452,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 10 — Error Handling and Security
+### Phase 10 � Error Handling and Security
 
 - [x] 10. Error handling, safe rendering, and empty states
   - [x] 10.1 Consolidate invalid-input and corrupted-storage handling
@@ -490,12 +490,12 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 11 — Quality Assurance
+### Phase 11 � Quality Assurance
 
 - [x] 11. Manual QA, compatibility, and performance verification
   - [x] 11.1 Execute manual functional test cases
     - **Objective:** Run the design's manual acceptance test cases and record results.
-    - **Requirements covered:** 1.1–1.8, 2.1–2.13, 3.1–3.7, 4.1–4.14, 5.1–5.9, 6.1–6.7, 7.1–7.7, 8.1–8.8, 9.1–9.5, 10.1–10.7, 11.1–11.3
+    - **Requirements covered:** 1.1�1.8, 2.1�2.13, 3.1�3.7, 4.1�4.14, 5.1�5.9, 6.1�6.7, 7.1�7.7, 8.1�8.8, 9.1�9.5, 10.1�10.7, 11.1�11.3
     - **Files:** `README.md` (record results/checklist)
     - **Implementation details:**
       - Execute the manual test matrix from the design (add income/expense, delete, balance, monthly filtering, category analysis, custom categories, invalid input, persistence, empty states, filtered empty state, clear filters, in-use category delete, corrupted storage, privacy notice).
@@ -528,7 +528,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 12 — Documentation
+### Phase 12 � Documentation
 
 - [x] 12. Project documentation
   - [x] 12.1 Write README with setup, deployment, privacy, and future architecture
@@ -539,22 +539,22 @@ across the document (dependency graph and coverage matrix reference them directl
       - Setup/run instructions (open `index.html` directly; no build step, no install).
       - GitHub Pages deployment instructions for the static site.
       - Data/privacy explanation: data stored only in the browser's `localStorage`, never sent to a server; Chart.js loads from a CDN and carries no financial data.
-      - Future architecture notes: the versioned schema + `StorageProvider` seam enable future Google Sheets sync, CSV export/import, and JSON backup/restore — **documented as extension points only, not implemented in v1**.
+      - Future architecture notes: the versioned schema + `StorageProvider` seam enable future Google Sheets sync, CSV export/import, and JSON backup/restore � **documented as extension points only, not implemented in v1**.
     - **Acceptance criteria:**
       - README lets a new user run and deploy the app and understand the privacy model and future extension points.
     - **Dependencies:** 12 (all prior implementation phases), 2.7
 
 ---
 
-### Phase 13 — Final Verification
+### Phase 13 � Final Verification
 
 - [x] 13. Final full-application verification against all requirements
   - **Objective:** Verify the completed application against ALL 17 requirements and their acceptance criteria using the coverage matrix below.
-  - **Requirements covered:** 1–17 (all)
+  - **Requirements covered:** 1�17 (all)
   - **Files:** `README.md` (final verification checklist), all `js/*.js`, `index.html`, `css/styles.css`
   - **Implementation details:**
     - Walk the Requirement Coverage Matrix and confirm each requirement is satisfied by its implementing tasks.
-    - Re-run the consistency regression (Property 8) and confirm all correctness properties (1–15) hold via their property tests or manual checks.
+    - Re-run the consistency regression (Property 8) and confirm all correctness properties (1�15) hold via their property tests or manual checks.
     - Confirm no forbidden technology is used and no build step is required, and that Google Sheets sync remains a documented placeholder only.
     - Confirm document completeness/consistency (Req 17) is reflected: terminology matches the glossary and every acceptance criterion is traceable to a task.
   - **Acceptance criteria:**
@@ -563,12 +563,12 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 14 — Currency Configuration (Configurable Single Currency)
+### Phase 14 � Currency Configuration (Configurable Single Currency)
 
 This phase adds the configurable single-currency model (Req 9 rewrite + new Req 18). Task 2.1 already
 implemented `formatCurrency` with a hard-coded `id-ID` locale and a currency-only signature; the
 formatter change here is a **modification of that already-complete code**, represented as a new task
-(14.1) rather than re-opening 2.1. No stored transaction amounts are ever converted or mutated — the
+(14.1) rather than re-opening 2.1. No stored transaction amounts are ever converted or mutated � the
 Selected_Currency is a presentation-only display setting.
 
 - [x] 14. Configurable single currency (Selected_Currency across all displayed money)
@@ -578,8 +578,8 @@ Selected_Currency is a presentation-only display setting.
     - **Files:** `js/utils.js`
     - **Implementation details:**
       - Change the signature to `formatCurrency(amount, currency = "IDR", locale)` delegating to `Intl.NumberFormat(locale, { style: "currency", currency })`; remove the hard-coded `'id-ID'` locale (Req 9.4).
-      - Add `SUPPORTED_CURRENCIES` mapping the 14 ISO 4217 codes (USD, EUR, GBP, IDR, JPY, CNY, SGD, AUD, CAD, CHF, MYR, THB, INR, KRW) → `{ locale, label }`, as the single source of truth shared by the formatter and the Settings UI (Req 9.1).
-      - Keep backward-safe defaults: default currency `"IDR"`; when a caller supplies only a currency code, resolve its default locale from `SUPPORTED_CURRENCIES` (IDR → `"id-ID"`).
+      - Add `SUPPORTED_CURRENCIES` mapping the 14 ISO 4217 codes (USD, EUR, GBP, IDR, JPY, CNY, SGD, AUD, CAD, CHF, MYR, THB, INR, KRW) ? `{ locale, label }`, as the single source of truth shared by the formatter and the Settings UI (Req 9.1).
+      - Keep backward-safe defaults: default currency `"IDR"`; when a caller supplies only a currency code, resolve its default locale from `SUPPORTED_CURRENCIES` (IDR ? `"id-ID"`).
     - **Acceptance criteria:**
       - Existing IDR callers still receive `"Rp 1.500.000"`-style output (no regression for current call sites).
       - `formatCurrency(1500, "USD", "en-US")` and other Supported_Currencies produce their `Intl.NumberFormat` currency strings; no hard-coded Indonesian locale remains.
@@ -591,8 +591,8 @@ Selected_Currency is a presentation-only display setting.
     - **Files:** `js/storage.js`
     - **Implementation details:**
       - Implement `getCurrency()` returning `settings.currency` when it is a member of `Supported_Currencies`, else `"IDR"` (absent/invalid fallback, Req 18.3/18.4).
-      - Implement `setCurrency(code)` validating `code ∈ Supported_Currencies`, persisting `settings.currency` via `saveData`, and leaving `transactions` untouched (Req 18.6/9.8).
-      - Additive only: `settings.currency` already exists in the schema (default `"IDR"`) — no schema/version change.
+      - Implement `setCurrency(code)` validating `code ? Supported_Currencies`, persisting `settings.currency` via `saveData`, and leaving `transactions` untouched (Req 18.6/9.8).
+      - Additive only: `settings.currency` already exists in the schema (default `"IDR"`) � no schema/version change.
     - **Acceptance criteria:**
       - `getCurrency()` returns the persisted code, or `"IDR"` when absent/invalid.
       - `setCurrency("USD")` persists the setting and does not alter any transaction.
@@ -605,7 +605,7 @@ Selected_Currency is a presentation-only display setting.
     - **Implementation details:**
       - Add a labelled currency `<select>` in a Settings section of `index.html`, listing every member of `Supported_Currencies` (code + label).
       - In `app.js`, add `state.selectedCurrency` seeded from `storage.getCurrency()` during `bootstrap()`; default-to-IDR is inherited from the accessor.
-      - Implement `onCurrencyChange(code)`: call `storage.setCurrency(code)`, update `state.selectedCurrency`, then re-render every currency-formatted surface (dashboard totals/Total_Balance, monthly summary, transaction list, chart tooltips/labels) WITHOUT modifying stored amounts (Req 18.6) — a reporting-style re-render like a month change.
+      - Implement `onCurrencyChange(code)`: call `storage.setCurrency(code)`, update `state.selectedCurrency`, then re-render every currency-formatted surface (dashboard totals/Total_Balance, monthly summary, transaction list, chart tooltips/labels) WITHOUT modifying stored amounts (Req 18.6) � a reporting-style re-render like a month change.
     - **Acceptance criteria:**
       - The Settings selector lists all Supported_Currencies and reflects the persisted Selected_Currency on load.
       - Changing the currency re-formats all displayed money app-wide with no change to stored transaction data.
@@ -628,7 +628,7 @@ Selected_Currency is a presentation-only display setting.
 ## Notes
 
 - Tasks marked with `*` are optional property/unit tests and can be skipped for a faster MVP; core implementation tasks are never optional.
-- No automated test framework is required for v1 (per steering). Property tests, where included, are documented executable specifications; if a harness is later added, use a property-based library (e.g., `fast-check`), ≥ 100 iterations, tagged `Feature: personal-finance-tracker, Property {number}: {property_text}`.
+- No automated test framework is required for v1 (per steering). Property tests, where included, are documented executable specifications; if a harness is later added, use a property-based library (e.g., `fast-check`), = 100 iterations, tagged `Feature: personal-finance-tracker, Property {number}: {property_text}`.
 - Each task references specific requirement clauses for traceability; the matrix below confirms all 17 requirements are covered.
 - Google Sheets sync is out of scope for v1 and appears only as the documented `GoogleSheetsProvider` placeholder (task 2.7) and README notes (task 12.1).
 - Requirement 17 (document completeness/consistency) is a documentation-quality requirement verified in the final task (13) by confirming glossary-consistent terminology and full requirement-to-task traceability.
@@ -880,8 +880,8 @@ Every requirement (including the new Requirement 18) is covered by at least one 
 | 17 | Document Completeness and Consistency | 13 (final verification) |
 | 18 | Currency Setting (Selected_Currency configuration) | 14.2, 14.3, 14.4, 14.5* |
 | 19 | Authentication (Supabase email/password) | 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 15.7, 15.8 |
-| 20 | User Identity & Data Isolation (architectural) | Phase 16 � not yet implemented |
-| 21 | Local Data Migration | Phase 17 � not yet implemented |
+| 20 | User Identity & Data Isolation (architectural) | Phase 16 ? not yet implemented |
+| 21 | Local Data Migration | Phase 17 ? not yet implemented |
 | 22 | Authentication Privacy & Security | 15.1, 15.2, 15.10 |
 
 Notes on coverage:
@@ -892,11 +892,11 @@ Notes on coverage:
 
 ---
 
-### Phase 15 � Authentication
+### Phase 15 ? Authentication
 
 This phase introduces email/password authentication using Supabase as the provider. The existing
 LocalStorage-based data layer remains the active storage backend throughout Phase 15; cloud database
-integration arrives in Phase 16. Every task in this phase is additive � no existing module is
+integration arrives in Phase 16. Every task in this phase is additive ? no existing module is
 broken or removed.
 
 - [ ] 15. Authentication: Supabase setup, auth module, and protected bootstrap
@@ -909,7 +909,7 @@ broken or removed.
       - Do NOT import `config.js` from any existing module yet; it is a configuration foundation only.
       - Do NOT initialise the Supabase client, implement any auth flow, or modify the bootstrap.
       - Add a "Supabase Setup" section to `README.md` documenting how to fill in the placeholders.
-      - Keep LocalStorage as the active data provider; all Phase 1�14 functionality must remain unchanged.
+      - Keep LocalStorage as the active data provider; all Phase 1?14 functionality must remain unchanged.
     - **Acceptance criteria:**
       - `js/config.js` exists, exports `SUPABASE_CONFIG` with placeholder values, and contains no private credentials.
       - The project loads normally with zero JavaScript errors when placeholders are in place.
@@ -931,7 +931,7 @@ broken or removed.
     - **Acceptance criteria:**
       - `auth.js` exports the six functions with the documented signatures.
       - The module can be imported without throwing when placeholders are still in `config.js`.
-      - No existing module is modified; all Phase 1�14 functionality unchanged.
+      - No existing module is modified; all Phase 1?14 functionality unchanged.
     - **Dependencies:** 15.1
 
   - [x] 15.3 Email Registration UI
@@ -1000,7 +1000,7 @@ broken or removed.
       - On a cold load with a valid session, the finance dashboard renders without a login prompt.
     - **Dependencies:** 15.4, 15.8
 
-  - [ ] 15.8 Authentication Guard (Protected Bootstrap)
+  - [x] 15.8 Authentication Guard (Protected Bootstrap)
     - **Objective:** Make `bootstrap()` async and gate `renderAll()` behind the `onAuthStateChange` callback so the finance dashboard is inaccessible without a valid session.
     - **Requirements covered:** 19.6
     - **Files:** `js/app.js`
@@ -1010,11 +1010,11 @@ broken or removed.
       - The finance dashboard HTML sections must be `hidden` until auth is confirmed.
     - **Acceptance criteria:**
       - Opening the app without a session shows only the login UI; the finance dashboard is not visible.
-      - After login, the dashboard renders and all Phase 1�14 functionality works exactly as before.
+      - After login, the dashboard renders and all Phase 1?14 functionality works exactly as before.
       - The `state.currentUser` object holds at minimum `{ id, email }`.
     - **Dependencies:** 15.2, 15.4, 15.5
 
-  - [ ] 15.9 Authentication UI Polish
+  - [x] 15.9 Authentication UI Polish
     - **Objective:** Finalize the auth UI: loading state during session check, user email display, smooth transitions between login/register/dashboard views.
     - **Requirements covered:** 19.1, 19.2, 19.6
     - **Files:** `index.html`, `css/styles.css`, `js/app.js`
@@ -1029,16 +1029,16 @@ broken or removed.
       - Auth forms match the existing visual style and are fully keyboard-accessible.
     - **Dependencies:** 15.8
 
-  - [ ] 15.10 Authentication QA
-    - **Objective:** Verify all authentication flows across Chrome, Firefox, Edge, and Safari, and confirm no Phase 1�14 regression.
-    - **Requirements covered:** 19.1�19.6
+  - [~] 15.10 Authentication QA
+    - **Objective:** Verify all authentication flows across Chrome, Firefox, Edge, and Safari, and confirm no Phase 1?14 regression.
+    - **Requirements covered:** 19.1?19.6
     - **Files:** `README.md` (record QA results)
     - **Implementation details:**
       - Test flows: register new user, login with correct credentials, login with wrong password, logout, password reset email delivery, password reset redirect, session persistence after browser close, session expiry handling (manually expire a token), cold load with no session.
       - Verify the GitHub Pages redirect URL works for password reset.
-      - Run the full Phase 1�14 manual test matrix (Groups A�K) while authenticated to confirm no regression.
+      - Run the full Phase 1?14 manual test matrix (Groups A?K) while authenticated to confirm no regression.
     - **Acceptance criteria:**
       - All authentication flows pass in Chrome, Firefox, Edge, and Safari.
-      - All Phase 1�14 manual test cases pass while authenticated.
+      - All Phase 1?14 manual test cases pass while authenticated.
       - No private credentials committed to the repository.
     - **Dependencies:** 15.9, 11.1

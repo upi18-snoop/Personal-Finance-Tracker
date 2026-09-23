@@ -2125,6 +2125,10 @@ async function bootstrap() {
   wireLogoutButton();
   wireResetPasswordForm();
 
+  // Show loading state while auth resolves
+  const authLoadingEl = document.getElementById('auth-loading');
+  if (authLoadingEl) authLoadingEl.hidden = false;
+
   // Hide the protected app during auth resolution to prevent flash of finance data.
   hideProtectedApp();
 
@@ -2132,6 +2136,9 @@ async function bootstrap() {
   // listener AND returns the current user (or null). Must complete before
   // deciding whether to initialize the finance app.
   const user = await initAuthSession();
+
+  // Auth resolved -- hide loading state
+  if (authLoadingEl) authLoadingEl.hidden = true;
 
   if (user) {
     showSignedInState(user.email);

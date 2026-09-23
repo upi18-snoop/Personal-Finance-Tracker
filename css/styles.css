@@ -42,6 +42,11 @@
   --color-expense: #b3261e;      /* red — readable on surface */
   --color-error: #b3261e;
 
+  /* Success state (auth confirmations) */
+  --color-success: #1b5e20;
+  --color-success-bg: #e8f5e9;
+  --color-success-border: #a5d6a7;
+
   /* --- Spacing scale (rem-based, 4px base) ----------------------------- */
   --space-2xs: 0.25rem;  /*  4px */
   --space-xs: 0.5rem;    /*  8px */
@@ -292,6 +297,20 @@ button:hover {
   margin: 0;
 }
 
+/* Auth form-level error gets slightly more visual weight */
+.auth-form .form-error {
+  padding: var(--space-xs) var(--space-sm);
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-sm);
+}
+
+.auth-form .form-error:empty {
+  padding: 0;
+  background: none;
+  border: none;
+}
+
 /* Per-field inline validation message shown directly under its control. */
 .field-error {
   color: var(--color-error);
@@ -301,6 +320,12 @@ button:hover {
 /* Empty field errors take no space until a validation message is written. */
 .field-error:empty {
   display: none;
+}
+
+/* When a field error is visible, highlight the associated input border */
+.form-field:has(.field-error:not(:empty)) input,
+.form-field:has(.field-error:not(:empty)) select {
+  border-color: var(--color-error);
 }
 
 /* ==========================================================================
@@ -1051,9 +1076,9 @@ body {
 .auth-section {
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   padding: var(--space-xl) var(--space-md);
-  min-height: 60vh;
+  min-height: 70vh;
   width: 100%;
 }
 
@@ -1065,16 +1090,18 @@ body {
   background-color: var(--color-surface);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  padding: var(--space-xl) var(--space-lg);
+  box-shadow: 0 2px 8px rgba(18, 26, 33, 0.10);
+  padding: var(--space-xl) var(--space-xl);
   width: 100%;
-  max-width: 26rem;
+  max-width: 28rem;
 }
 
 .auth-card__heading {
   font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
   margin-bottom: var(--space-lg);
   text-align: center;
+  color: var(--color-heading);
 }
 
 /*
@@ -1085,11 +1112,20 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  margin-bottom: var(--space-xs);
 }
 
 /* Auth form submit button fills the card width on all sizes. */
 .auth-form .form-actions button {
   width: 100%;
+}
+
+/* Auth submit button — prominent primary action */
+.auth-form .form-actions button[type="submit"] {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.01em;
+  transition: background-color 0.15s ease;
 }
 
 /*
@@ -1099,6 +1135,7 @@ body {
 .auth-form button[disabled] {
   opacity: 0.65;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 /*
@@ -1108,14 +1145,14 @@ body {
 .auth-success {
   margin-top: var(--space-md);
   padding: var(--space-md);
-  background-color: #e8f5e9;
-  border: 1px solid #a5d6a7;
+  background-color: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
   border-radius: var(--radius-sm);
   text-align: center;
 }
 
 .auth-success__message {
-  color: #1b5e20;
+  color: var(--color-success);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-base);
 }
@@ -1126,7 +1163,10 @@ body {
  */
 .auth-card__footer {
   margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: var(--border-width) solid var(--color-border);
   text-align: center;
+  line-height: 1.8;
 }
 
 /*
@@ -1134,18 +1174,28 @@ body {
  * Used for low-emphasis navigation actions inside auth cards.
  */
 .btn-link {
+  display: inline-flex;
+  align-items: center;
   background: none;
   border: none;
   color: var(--color-primary);
   text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
   font-size: var(--font-size-sm);
-  min-height: auto;
-  padding: 0;
+  min-height: 36px;
+  padding: var(--space-2xs) 0;
+  vertical-align: baseline;
 }
 
 .btn-link:hover {
   color: var(--color-primary-hover);
+}
+
+.btn-link:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 /*
@@ -1156,6 +1206,8 @@ body {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   margin-bottom: var(--space-md);
+  text-align: center;
+  line-height: var(--line-height-base);
 }
 
 /*
@@ -1182,6 +1234,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+  flex-wrap: wrap;
 }
 
 
@@ -1200,13 +1253,14 @@ body {
   gap: var(--space-xs);
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+  flex-wrap: wrap;
 }
 
 .auth-signed-in__email {
   font-weight: var(--font-weight-medium);
   color: var(--color-text);
   /* Prevent very long addresses from breaking the header layout */
-  max-width: 16rem;
+  max-width: 14rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1242,4 +1296,44 @@ body {
   color: #fff;
   outline: 2px solid var(--color-expense);
   outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Authentication UI — Task 15.9 (UI Polish)
+   ========================================================================== */
+
+/*
+ * Auth loading state — covers the app while auth is resolving on boot.
+ * Shown immediately, removed once bootstrap() determines auth state.
+ */
+#auth-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40vh;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/*
+ * On narrow viewports, auth cards should use the full width with minimal
+ * side padding so form fields are fully usable at 320px.
+ */
+@media (max-width: 380px) {
+  .auth-card {
+    padding: var(--space-lg) var(--space-md);
+  }
+}
+
+/*
+ * On larger viewports, center the card with more generous vertical spacing.
+ */
+@media (min-width: 600px) {
+  .auth-section {
+    min-height: 80vh;
+  }
+
+  .auth-card {
+    max-width: 30rem;
+  }
 }
