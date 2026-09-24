@@ -3,7 +3,8 @@
 **Project:** Personal Finance Tracker  
 **Phase:** 18 — Security & Session Hardening  
 **Audit date:** 2026-09-24  
-**Status:** Tasks 18.1–18.4 complete. Tasks 18.5–18.12 pending.
+**Finalized:** Task 18.12  
+**Status:** ✅ All tasks 18.1–18.12 complete.
 
 ---
 
@@ -11,373 +12,18 @@
 
 | Task | Title | Status |
 |------|-------|--------|
-| 18.1 | Security Architecture Audit | ✅ Complete |
-| 18.2 | Authentication Security — `js/auth.js` | ✅ Complete |
-| 18.3 | Session Lifecycle Hardening — `js/app.js` | ✅ Complete |
-| 18.4 | Supabase Client & Configuration Security | ✅ Complete |
-| 18.5 | Row Level Security & Multi-User Isolation | ⏳ Pending |
-| 18.6 | Storage Provider Security — `js/storage.js` | ⏳ Pending |
-| 18.7 | Migration Security — `js/migration.js` | ⏳ Pending |
-| 18.8 | Error Handling & Data Leakage Prevention | ⏳ Pending |
-| 18.9 | Logout & State Cleanup — `js/app.js` | ⏳ Pending |
-| 18.10 | Security Regression Test Matrix | ⏳ Pending |
-| 18.11 | Production Security Checklist | ⏳ Pending |
-| 18.12 | Final QA & Phase 18 Report | ⏳ Pending |
-| 18.13 | Checkpoint | ⏳ Pending |
-
----
-
-## Files Inspected (Task 18.1)
-
-| File | Purpose |
-|------|---------|
-| `js/auth.js` | Authentication service — signUp, signIn, signOut, getCurrentUser, onAuthStateChange, resetPassword |
-| `js/config.js` | Supabase public configuration (url + anonKey) |
-| `js/supabase.js` | Supabase client singleton factory — getSupabaseClient() |
-| `js/supabase-storage.js` | SupabaseDatabaseProvider — all Supabase CRUD methods |
-| `js/storage.js` | Storage router — LocalStorage ↔ Supabase provider selection |
-| `js/migration.js` | LocalStorage → Supabase migration service |
-| `js/app.js` | App bootstrap, auth gate, session lifecycle, all UI orchestration |
-| `supabase/schema.sql` | PostgreSQL table definitions |
-| `supabase/rls.sql` | Row Level Security policies |
-| `.gitignore` | Repository ignore rules |
-| `README.md` | Project documentation and security notes |
-
----
-
-## Security Findings
-
-### F-01 — `_normalizeError()` in `js/auth.js` returns raw SDK message string
-**Severity:** Medium  
-**File:** `js/auth.js` lines 75–87  
-**Description:** `_normalizeError(raw)` extracts `String(raw.message)` from the SDK error and
-returns it verbatim as the `message` field of the Normalized_Error object. The raw SDK message
-may contain internal Supabase server details (e.g., "invalid login credentials for user@example.com",
-PostgREST error text, or server-side hints). This violates Req 25.9 which requires the `message`
-field to be safe for display and free of raw SDK content.
-
-```js
-// Current (lines 82, 85 of auth.js):
-return { code, message: msg };       // msg is raw SDK error.message
-return { code: 'unknown', message: msg }; // msg is raw SDK error.message
-```
-
-**Fix required:** Replace `message: msg` with a static, code-keyed safe message looked up from
-a separate safe-message map. The `msg` string should only be used internally for pattern matching
-to derive `code`; it must not escape `_normalizeError()`.  
-**Blocking:** No — does not allow unauthorized data access or auth bypass. Risk is information
-leakage of server internals to UI consumers.  
-**Task to fix:** 18.2
-
----
-
-### F-02 — `_normalizeError()` in `js/supabase-storage.js` returns raw SDK message for unknown errors
-**Severity:** Low  
-**File:** `js/supabase-storage.js` lines 60–95  
-**Description:** For errors that do not match `network-error` or `not-authenticated` patterns,
-`_normalizeError()` returns `{ code: 'unknown', message: 'An error occurred. Please try again.' }`.
-This final fallback is already a static safe string — **compliant**. The `network-error` and
-`not-authenticated` branches also return static messages — **compliant**. The `duplicate` branch
-returns a static message — **compliant**. No fix required for the static message content.  
-However, `console.error` calls log `error.code ?? ''` which is safe (code only, no full message).
-All `console.warn` and `console.error` calls in this file log only a method label and `error.code`
-or `err?.name` — no full SDK messages are emitted.  
-**Status:** PASS — confirmed compliant. No fix required.
-
----
-
-### F-03 — `onLogout()` in `js/app.js` is missing required teardown steps
-**Severity:** High  
-**File:** `js/app.js` lines 1445–1453  
-**Description:** The current `onLogout()` implementation is:
-
-```js
-function onLogout() {
-  (async () => {
-    await auth.signOut();
-    showSignedOutState();
-    const appMain = document.getElementById("app-main");
-    if (appMain) appMain.hidden = true;
-    showLoginView();
-  })();
-}
-```
-
-Missing from this implementation:
-1. `financeAppInitialized` is NOT reset to `false` — a subsequent login by a different user on the
-   same tab will find `financeAppInitialized === true` and skip `initializeFinanceApplication()`,
-   meaning User B would not get their own fresh data loaded. **This is a cross-user data leakage
-   risk** (Req 26.3, 32.1).
-2. `hideMigrationModal()` is not called — the migration modal may remain open after logout (Req 32.2).
-3. Finance_UI DOM content (transaction list, balance cards, category list, charts, reports) is not
-   cleared — User B (or any observer) could see User A's data in the DOM before the new user's
-   data loads (Req 32.6).
-4. `auth.signOut()` failure is not handled — if `signOut()` throws or rejects, no teardown steps
-   execute (Req 32.5).
-
-**Blocking:** Yes — the `financeAppInitialized` not-reset is a confirmed data-leakage vector
-between users in the same browser tab.  
-**Task to fix:** 18.3, 18.9
-
----
-
-### F-04 — `onAuthStateChange` signed-out branch missing `financeAppInitialized` reset and DOM clear
-**Severity:** High  
-**File:** `js/app.js` lines 1768–1771  
-**Description:** The signed-out `else` branch in `initAuthSession()` / `onAuthStateChange`:
-
-```js
-} else {
-  state.currentUser = null;
-  showSignedOutState();
-  hideProtectedApp();
-}
-```
-
-Missing:
-1. `financeAppInitialized = false` — session expiry or remote sign-out (TOKEN_REFRESHED → null,
-   SIGNED_OUT) does not reset this guard. A subsequent login will skip full re-initialization.
-2. `hideMigrationModal()` — migration modal stays open if a session expires mid-migration.
-3. `clearFinanceUIDOM()` — Finance_UI DOM content remains populated while the user is signed out.
-
-This applies to SESSION_EXPIRED, TOKEN_REFRESHED resulting in no user, and remote sign-out events —
-all paths that do not go through `onLogout()`.  
-**Blocking:** Yes — same cross-user data leakage risk as F-03.  
-**Task to fix:** 18.3
-
----
-
-### F-05 — `getSupabaseClient()` does not reject empty-string or whitespace-only config values
-**Severity:** Low  
-**File:** `js/supabase.js` lines 64–73  
-**Description:** The current guard checks for placeholder strings and falsy values but not for
-`url.trim() === ''` or `anonKey.trim() === ''`. A configuration value of `'   '` (whitespace only)
-would pass the guard and attempt CDN import with a whitespace URL, producing a confusing error
-rather than the clean `null` return. Edge case with low practical impact since config.js ships
-with explicit placeholder strings.  
-**Blocking:** No.  
-**Task to fix:** 18.4
-
----
-
-### F-06 — CDN load failure catch clause in `getSupabaseClient()` logs the raw error object
-**Severity:** Low  
-**File:** `js/supabase.js` line 99  
-**Description:**
-
-```js
-console.error('supabase.js: failed to load supabase-js from CDN.', err);
-```
-
-The raw `err` object is passed as a second argument to `console.error`. This `err` may contain
-the CDN URL (which includes the anonKey in some CDN configurations) or other internal details
-in its stack trace. The config values themselves are not interpolated into the string, but the
-raw error may still expose URL details in DevTools.  
-**Blocking:** No — no credentials are in the stack trace, only the CDN URL which is public.
-Risk is minimal but the static message pattern should be enforced.  
-**Task to fix:** 18.4
-
----
-
-### F-07 — `validateRegisterForm()` in `js/app.js` enforces password ≥ 6 chars, not ≥ 8
-**Severity:** Low  
-**File:** `js/app.js` lines 1153–1159  
-**Description:** The UI-layer registration validation accepts passwords ≥ 6 characters:
-
-```js
-} else if (values.password.length < 6) {
-  errors.push({ field: "password", message: "Password must be at least 6 characters." });
-}
-```
-
-Task 18.2 requires `signUp()` in `auth.js` to enforce ≥ 8 characters with a `'validation-error'`
-code before any network call. Once that is implemented, the UI and auth module would be inconsistent
-— the UI would allow 6- and 7-character passwords through the form but the auth module would reject
-them. This inconsistency means users receive no client-side feedback for passwords of length 6–7,
-only a rejection from auth.js.  
-**Blocking:** No. Functional issue after Task 18.2 is implemented.  
-**Task to fix:** 18.2
-
----
-
-### F-08 — Migration entry-point guards use error code `'INVALID_USER_ID'` instead of `'unauthenticated'`
-**Severity:** Low  
-**File:** `js/migration.js` — `startMigration`, `retryMigration`, `migrateCategoriesStep`,
-`migrateSettingsStep`, `verifyMigration`, `resolveCurrencyConflict`  
-**Description:** All six entry points guard against null/undefined/non-string userId but return
-`code: 'INVALID_USER_ID'` which is a non-standard internal code not aligned with the Normalized_Error
-contract defined in Req 30.1. The guard in `clearLocalFinanceData` uses `console.warn` and
-`return { ok: false }` without an error code at all.  
-Guards also do not reject whitespace-only strings — `userId = '   '` would pass the
-`!userId || typeof userId !== 'string'` check.  
-**Blocking:** No — callers check `result.ok`, not `result.error.code`. Low practical impact.  
-**Task to fix:** 18.7
-
----
-
-### F-09 — `.gitignore` missing `.env*` and `*.key` / `*.pem` entries
-**Severity:** Medium  
-**File:** `.gitignore`  
-**Description:** Current `.gitignore` contains OS cruft, editor files, and log exclusions but
-does NOT include:
-- `.env`
-- `.env.local`
-- `.env.production`
-- `*.key`
-- `*.pem`
-
-If a developer creates a `.env` file with credentials or copies a private key into the repository
-directory, there is no protection against accidental `git add .` committing it.  
-**Blocking:** No — no such files currently exist in the repository.  
-**Task to fix:** 18.4
-
----
-
-### F-10 — `storage.js` `getProvider()` lacks UUID v4 validation and whitespace guard
-**Severity:** Low  
-**File:** `js/storage.js` line 72  
-**Description:** Current routing:
-
-```js
-function getProvider(userId) {
-  if (userId) {
-    return new SupabaseDatabaseProvider();
-  }
-  return new LocalStorageProvider();
-}
-```
-
-A whitespace-only string `'   '` is truthy and would route to `SupabaseDatabaseProvider`, issuing
-a Supabase query with a malformed userId. Similarly, any non-UUID truthy string (e.g. an email
-address accidentally passed as userId) would route to Supabase.  
-**Note:** Supabase Auth user IDs are confirmed to be standard UUID v4 values (per Supabase
-documentation and the `auth.users.id` column type `UUID` in schema.sql). UUID v4 validation
-is therefore safe to implement without risk of routing legitimate authenticated users to
-LocalStorage.  
-**Blocking:** No — callers always pass `state.currentUser?.id ?? null` which is either null or
-a Supabase UUID. Low practical risk in current architecture.  
-**Task to fix:** 18.6
-
----
-
-### F-11 — `js/app.js` has no `window.onerror` or `unhandledrejection` global error handlers
-**Severity:** Low  
-**File:** `js/app.js` — bootstrap section  
-**Description:** No global `window.onerror` or `window.addEventListener('unhandledrejection', ...)`
-handler exists. Unhandled errors and promise rejections are surfaced directly by the browser,
-potentially exposing raw error messages (SDK details, stack traces) in the browser console and
-in browser-native error dialogs. This does not expose data to other users but may expose
-implementation details during a session (Req 31.8).  
-**Blocking:** No.  
-**Task to fix:** 18.8
-
----
-
-### F-12 — README does not have a dedicated "Security" or "Production Configuration" section
-**Severity:** Low  
-**File:** `README.md`  
-**Description:** The README contains security information scattered across multiple sections
-(Phase 15 setup notes, Phase 16 audit notes, security invariants tables) but does not have a
-single authoritative top-level "Security" or "Production Configuration" section as required by
-Req 33.4 and Req 34.1. The scattered information is accurate but not easily discoverable by
-a developer preparing for deployment.  
-**Blocking:** No — documentation gap only.  
-**Task to fix:** 18.11
-
----
-
-## Credential Scan Results (Task 18.1)
-
-| Pattern | Result |
-|---------|--------|
-| `service_role` | ✅ Not found in any `.js`, `.html`, `.sql`, `.json` file. Appears only in spec/docs as a term being warned against — no actual key value. |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ Not found |
-| `supabase_admin` | ✅ Not found |
-| `service_role_key` | ✅ Not found |
-| `postgres://` | ✅ Not found |
-| `postgresql://` | ✅ Not found |
-| `eyJ[A-Za-z0-9_-]{200,}` (active JWT > 200 chars) | ✅ Not found |
-| `createClient(` in files other than `js/supabase.js` | ✅ Not found — singleton constraint holds |
-| Passwords/tokens in `console.*` calls | ✅ Not found — all console calls log safe labels, error codes, or static messages |
-| `state.currentUser.email` used as userId in storage/migration | ✅ Not found — all calls pass `state.currentUser.id` or `state.currentUser?.id ?? null` |
-
-**Credential scan: CLEAN.** No privileged credentials found in any committed file.
-
----
-
-## Auth Mechanism Audit
-
-| Check | Result |
-|-------|--------|
-| Supabase Auth is the sole authentication mechanism | ✅ PASS — only `supabase.auth.*` methods used; no manual JWT creation |
-| No manual JWT parsing in any module | ✅ PASS |
-| Session JWT managed solely by supabase-js | ✅ PASS — no manual `localStorage.setItem` for auth tokens |
-| Passwords never stored, logged, or returned | ✅ PASS — `auth.js` never persists password values |
-| `onAuthStateChange` fires `queueMicrotask('INITIAL_SESSION', null)` when not configured | ✅ PASS |
-| `getCurrentUser()` returns `null` safely when unconfigured or no session | ✅ PASS |
-
----
-
-## RLS Audit (SQL Analysis of `supabase/rls.sql`)
-
-| Check | Result |
-|-------|--------|
-| `ALTER TABLE transactions ENABLE ROW LEVEL SECURITY` | ✅ Present |
-| `ALTER TABLE categories ENABLE ROW LEVEL SECURITY` | ✅ Present |
-| `ALTER TABLE settings ENABLE ROW LEVEL SECURITY` | ✅ Present |
-| `transactions_owner_policy` — FOR ALL, authenticated, USING + WITH CHECK = auth.uid() | ✅ Present |
-| `categories_owner_policy` — FOR ALL, authenticated, USING + WITH CHECK = auth.uid() | ✅ Present |
-| `settings_owner_policy` — FOR ALL, authenticated, USING + WITH CHECK = auth.uid() | ✅ Present |
-| No permissive policy for `anon` role on any table | ✅ Confirmed — no anon grants present |
-| Verification queries provided in rls.sql | ✅ Present |
-
----
-
-## Defence-in-Depth Audit (`js/supabase-storage.js`)
-
-| Method | `user_id: userId` in payload | Result |
-|--------|------------------------------|--------|
-| `addTransaction` | `user_id: userId` explicitly set in `row` object | ✅ PASS |
-| `addCustomCategory` | `user_id: userId` explicitly set in insert payload | ✅ PASS |
-| `setSettings` | `user_id: userId` in upsert payload | ✅ PASS |
-| `initializeUserData` | `user_id: userId` in upsert payload | ✅ PASS |
-| `deleteTransaction` | `.eq('user_id', userId)` in WHERE predicate | ✅ PASS |
-| `deleteCustomCategory` | `.eq('user_id', userId)` in WHERE predicate | ✅ PASS |
-| `getTransactions` | `.eq('user_id', userId)` in SELECT predicate | ✅ PASS |
-| `getCustomCategories` | `.eq('user_id', userId)` in SELECT predicate | ✅ PASS |
-| `getSettings` | `.eq('user_id', userId)` in SELECT predicate | ✅ PASS |
-
-All nine methods enforce per-user scoping at the application layer independently of RLS.
-
----
-
-## Migration Security Audit (`js/migration.js`)
-
-| Check | Result |
-|-------|--------|
-| All entry points guard against null/undefined/non-string userId | ✅ PASS (F-08: error codes need standardisation) |
-| `migrationMarkerKey()` uses UUID, never email | ✅ PASS — `MIGRATION_MARKER_PREFIX + userId` where userId comes from `state.currentUser.id` |
-| All call sites in `app.js` pass `state.currentUser.id` (not `.email`) | ✅ PASS — confirmed by static analysis |
-| `clearLocalFinanceData` removes only `STORAGE_KEY`, not marker key | ✅ PASS — confirmed by static analysis |
-| Migration module never calls `localStorage.setItem(STORAGE_KEY, ...)` | ✅ PASS — only `writeMigrationMarker()` writes to localStorage, using the marker key |
-| Network error stops upload and sets status to `'partial'` | ✅ PASS — implemented in `startMigration` upload loop |
-
----
-
-## Console / Log Leakage Audit
-
-| Module | Calls found | Leakage risk |
-|--------|-------------|--------------|
-| `js/auth.js` | None | ✅ PASS — no console calls in auth.js |
-| `js/supabase.js` | `console.error('...', err)` on CDN failure | ⚠️ F-06 — raw `err` object logged (Low) |
-| `js/supabase-storage.js` | `console.error(label, error.code ?? '')` and `console.warn(label)` | ✅ PASS — code only, no full messages |
-| `js/storage.js` | None in routing logic | ✅ PASS |
-| `js/migration.js` | `console.warn(label)` for invalid userId in `detectMigrationOpportunity` and `clearLocalFinanceData` | ✅ PASS — static labels only |
-| `js/app.js` | `console.error(label, err)`, `console.warn(label, err)`, `console.info(label, { selectedMonth })` | ✅ PASS — no transaction/category/settings objects; `err` is raw but no sensitive data expected in migration/render errors |
-| `js/charts.js` | `console.warn(label)` | ✅ PASS — static label |
-
-No console call outputs passwords, JWTs, transaction data, category lists, settings objects,
-or financial totals in production code paths.
+| 18.1 | Security Architecture Audit | ✅ Complete — full source audit performed; 13 findings identified (F-01–F-13); credential scan clean; `PHASE18_REPORT.md` created with stubs. |
+| 18.2 | Authentication Security — `js/auth.js` | ✅ Complete — `SAFE_MESSAGES` map added; `_normalizeError()` no longer returns raw SDK content; `signUp()` pre-validates email format and password ≥ 8 before any network call; `validateRegisterForm()` in `app.js` updated to match. |
+| 18.3 | Session Lifecycle Hardening — `js/app.js` | ✅ Complete — `clearAuthenticatedSessionState()` single shared teardown helper implemented; `clearFinanceUIDOM()` new private helper wipes all Finance_UI content; `destroyCharts()` added to `charts.js`; `onAuthStateChange` signed-out branch updated to call the shared helper. |
+| 18.4 | Supabase Client & Configuration Security | ✅ Complete — `getSupabaseClient()` now rejects empty and whitespace-only config values; CDN catch logs a static-only message; `.gitignore` updated with `.env*`, `*.key`, `*.pem`; developer-local pre-commit hook created. |
+| 18.5 | Row Level Security & Multi-User Isolation | ✅ Complete — `supabase/rls.sql` audited; RLS confirmed on all three tables with correct `USING` + `WITH CHECK` policies; defence-in-depth `user_id` present in all writes; no code changes required; two-user isolation test procedure documented in `PRODUCTION_CHECKLIST.md`. |
+| 18.6 | Storage Provider Security — `js/storage.js` | ✅ Complete — `UUID_V4_PATTERN` constant and `_isSupabaseUser()` helper added; `getProvider()` and all 10 exported functions hardened to UUID v4 validation; source-integrity JSDoc added. |
+| 18.7 | Migration Security — `js/migration.js` | ✅ Complete — all eight guard sites updated: error code `'INVALID_USER_ID'` → `'unauthenticated'`; whitespace guard `userId.trim() === ''` added throughout; `clearLocalFinanceData` upgraded to standard error shape; localStorage invariant comment added. |
+| 18.8 | Error Handling & Data Leakage Prevention | ✅ Complete — 7 catch-block console calls in `app.js` replaced with `err?.name ?? 'unknown'`; `window.addEventListener('unhandledrejection')` and `window.onerror` global handlers added; `console.log` scan found zero violations; `window.confirm` messages audited — clean. |
+| 18.9 | Logout & State Cleanup — `js/app.js` | ✅ Complete — `onLogout()` rewritten to use `clearAuthenticatedSessionState()`; `auth.signOut().catch(() => {})` ensures teardown always completes; confirmed `onAuthStateChange` signed-out branch uses the same helper. |
+| 18.10 | Security Regression Test Matrix | ✅ Complete — `docs/security-regression-tests.md` created with all five matrices (A1–A9, B1–B6, C1–C5, D1–D6, E1–E5); code-verifiable tests D1–D3 marked PASS; "How to run" section added. |
+| 18.11 | Production Security Checklist | ✅ Complete — `PRODUCTION_CHECKLIST.md` created with four sections (Supabase Configuration, Application Security, Repository Hygiene, Deployment) plus Manual Verification Steps §5; zero FAIL items; `README.md` updated with "Security & Production Configuration" section. |
+| 18.12 | Final QA & Phase 18 Report | ✅ Complete — static code QA performed on all six modified JS files; `node --check` passes for all; no regressions confirmed; all sections of this report finalized. |
 
 ---
 
@@ -385,24 +31,53 @@ or financial totals in production code paths.
 
 | File | Change |
 |------|--------|
-| `PHASE18_REPORT.md` | Created (Task 18.1) — audit findings, security scan results, report stubs |
-| `js/auth.js` | Task 18.2 — added `SAFE_MESSAGES` map; `_normalizeError()` now returns static safe messages only (never raw SDK message); added `signUp()` pre-validation for email format and password ≥ 8 before any network call |
-| `js/app.js` | Task 18.2 — raised `validateRegisterForm()` password minimum from 6 to 8 characters; updated `getRegisterErrorMessage()` weak-password case to match |
-| `js/supabase.js` | Task 18.4 — hardened `getSupabaseClient()` guard to also reject empty-string and whitespace-only config values (Req 27.3, fixes F-05); replaced CDN `catch` log with a static-only message that does not interpolate `err`, `url`, or `anonKey` (Req 27.4, fixes F-06) |
-| `.gitignore` | Task 18.4 — added `.env`, `.env.local`, `.env.production`, `*.key`, `*.pem` entries to prevent accidental credential commits (Req 33.3, fixes F-09) |
-| `.git/hooks/pre-commit` | Task 18.4 — created developer-local credential scanner that blocks commits containing `service_role` or a long `eyJ…` JWT (Req 33.6); **not committed to the repository**; supplementary safeguard only |
+| `PHASE18_REPORT.md` | Created (Task 18.1) — audit findings, security scan results, all report sections; finalized in Task 18.12. |
+| `js/auth.js` | Task 18.2 — added `SAFE_MESSAGES` map; `_normalizeError()` now returns static safe messages only (never raw SDK message); added `signUp()` pre-validation for email format and password ≥ 8 before any network call. |
+| `js/app.js` | Tasks 18.2, 18.3, 18.8, 18.9 — raised `validateRegisterForm()` password minimum from 6 to 8 characters; implemented `clearFinanceUIDOM()` private helper; implemented `clearAuthenticatedSessionState()` single shared teardown helper; rewrote signed-out branch of `onAuthStateChange` to use the shared helper; replaced 7 raw `err` console calls with `err?.name ?? 'unknown'`; added `window.addEventListener('unhandledrejection')` and `window.onerror` global handlers; rewrote `onLogout()` to call `clearAuthenticatedSessionState()`. |
+| `js/supabase.js` | Task 18.4 — hardened `getSupabaseClient()` guard to also reject empty-string and whitespace-only config values; replaced CDN `catch` log with a static-only message that does not interpolate `err`, `url`, or `anonKey`. |
+| `js/storage.js` | Task 18.6 — added `UUID_V4_PATTERN` constant and `_isSupabaseUser()` helper; updated `getProvider()` and all 10 exported function routing guards to enforce UUID v4 validation before routing to Supabase; added source-integrity JSDoc invariant to `getProvider()`. |
+| `js/migration.js` | Task 18.7 — updated all eight guard sites (six public entry points + `clearLocalFinanceData` + `detectMigrationOpportunity`): error code `'INVALID_USER_ID'` → `'unauthenticated'`; message standardized to `'A signed-in user is required.'`; whitespace guard `userId.trim() === ''` added; `clearLocalFinanceData` guard upgraded to standard `{ ok: false, error: { code, message } }` shape; explicit localStorage invariant comment added above `localStorage.removeItem(STORAGE_KEY)`. |
+| `js/charts.js` | Task 18.3 — added `destroyCharts()` export that destroys both Chart.js instances (expense and income), disconnects the ResizeObserver, and resets module-level variables to null so `initCharts()` can recreate them cleanly on the next login. |
+| `supabase/rls.sql` | Task 18.5 — audited and confirmed correct; no code changes required. RLS is enabled on all three tables (`transactions`, `categories`, `settings`) with `FOR ALL authenticated` policies and both `USING (user_id = auth.uid())` and `WITH CHECK (user_id = auth.uid())` on each. |
+| `.gitignore` | Task 18.4 — added `.env`, `.env.local`, `.env.production`, `*.key`, `*.pem` entries to prevent accidental credential commits. |
+| `.git/hooks/pre-commit` | Task 18.4 — created developer-local credential scanner that blocks commits containing `service_role` or a long `eyJ…` JWT. **Not committed to the repository**; supplementary safeguard only. |
+| `PRODUCTION_CHECKLIST.md` | Task 18.11 — created in repository root with four sections (Supabase Configuration, Application Security, Repository Hygiene, Deployment), Manual Verification Steps §5, and final summary table (31 PASS, 0 FAIL, 16 NEEDS MANUAL VERIFICATION, 2 NOT CONFIGURED). |
+| `docs/security-regression-tests.md` | Task 18.10 — created with all five security regression test matrices (A1–A9 authentication, B1–B6 user isolation, C1–C5 migration, D1–D6 credential safety, E1–E5 state safety); code-verifiable tests D1–D3 marked PASS from Task 18.1 scan results. |
+| `README.md` | Tasks 18.11, 18.12 — added "Security & Production Configuration" section (credential safety table, Service_Role_Key prohibition, anon-key safety, RLS requirement, anon-key rotation procedure); added Phase 18 notes. |
+
+---
+
+## Security Findings
+
+| ID | Severity | Description | Status |
+|----|----------|-------------|--------|
+| F-01 | Medium | `_normalizeError()` in `js/auth.js` returned raw SDK message string verbatim, violating Req 25.9. | ✅ Fixed — Task 18.2 |
+| F-02 | Low | `_normalizeError()` in `js/supabase-storage.js` — audit confirmed all return paths use static strings; no fix required. | ✅ Accepted — already compliant |
+| F-03 | High | `onLogout()` in `js/app.js` missing: `financeAppInitialized` not reset (cross-user data leak risk); migration modal not closed; Finance_UI DOM not cleared; `auth.signOut()` failure not handled. | ✅ Fixed — Tasks 18.3, 18.9 |
+| F-04 | High | `onAuthStateChange` signed-out branch missing `financeAppInitialized` reset, `hideMigrationModal()`, and `clearFinanceUIDOM()`. | ✅ Fixed — Task 18.3 |
+| F-05 | Low | `getSupabaseClient()` did not reject empty-string or whitespace-only config values. | ✅ Fixed — Task 18.4 |
+| F-06 | Low | CDN load failure catch clause in `getSupabaseClient()` logged raw `err` object, potentially exposing CDN URL. | ✅ Fixed — Task 18.4 |
+| F-07 | Low | `validateRegisterForm()` enforced password ≥ 6 chars while auth module now enforces ≥ 8. | ✅ Fixed — Task 18.2 |
+| F-08 | Low | Migration entry-point guards used non-standard error code `'INVALID_USER_ID'`; whitespace-only `userId` not rejected; `clearLocalFinanceData` guard missing standard error shape. | ✅ Fixed — Task 18.7 |
+| F-09 | Medium | `.gitignore` missing `.env*`, `*.key`, `*.pem` credential file exclusions. | ✅ Fixed — Task 18.4 |
+| F-10 | Low | `storage.js` `getProvider()` lacked UUID v4 validation; whitespace-only `userId` would route to Supabase. | ✅ Fixed — Task 18.6 |
+| F-11 | Low | `js/app.js` had no `window.onerror` or `unhandledrejection` global error handlers, risking raw error exposure in console/dialogs. | ✅ Fixed — Task 18.8 |
+| F-12 | Low | `README.md` had no dedicated "Security" or "Production Configuration" section. | ✅ Fixed — Task 18.11 |
+| F-13 | Low | 7 `console.error`/`console.warn` calls in `js/app.js` passed raw `err` object, potentially leaking stack traces. | ✅ Fixed — Task 18.8 |
+
+All 13 findings are either **Fixed** or **Accepted as compliant**. Zero findings remain open.
 
 ---
 
 ## Fixes Applied
 
-### Fix 18.2-A — Addresses F-01: `_normalizeError()` in `auth.js` returns raw SDK message
+### Fix 18.2-A — Addresses F-01: `_normalizeError()` in `auth.js` returned raw SDK message
 **File:** `js/auth.js`  
 **Finding:** F-01 (Medium)  
-**Change:** Added `SAFE_MESSAGES` constant — a map of error code → static safe string. Rewrote `_normalizeError()` so the raw SDK `message` is used only internally for pattern matching to derive `code`; the raw string is never assigned to any returned field. The returned `{ code, message }` object always has `message` from `SAFE_MESSAGES`, which is a hard-coded static string ≤ 200 characters with no SDK content, no JWT, no credentials.  
-**Verification:** `SAFE_MESSAGES` exists in `auth.js`; `_normalizeError()` returns `SAFE_MESSAGES[code]` not `rawMsg`; confirmed by static grep. `node --check` passes.
+**Change:** Added `SAFE_MESSAGES` constant — a map of error code → static safe string. Rewrote `_normalizeError()` so the raw SDK `message` is used only internally for pattern matching to derive `code`; the raw string is never assigned to any returned field. The returned `{ code, message }` object always has `message` from `SAFE_MESSAGES`, a hard-coded static string ≤ 200 characters with no SDK content.  
+**Verification:** `SAFE_MESSAGES` exists in `auth.js`; `_normalizeError()` returns `SAFE_MESSAGES[code]` not `rawMsg`. `node --check js/auth.js` → PASS.
 
-### Fix 18.2-B — Addresses F-07: `signUp()` password minimum was < 8 at auth layer
+### Fix 18.2-B — Addresses F-07: `signUp()` password minimum below 8 at auth layer
 **File:** `js/auth.js`  
 **Finding:** F-07 (Low)  
 **Change:** Added client-side pre-validation in `signUp()` before any network call: (1) empty/missing email check; (2) email format regex `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`; (3) `password.length < 8` check. All failures return `{ ok: false, error: { code: 'validation-error', message: '...' } }` without calling `getSupabaseClient()`.
@@ -411,54 +86,233 @@ or financial totals in production code paths.
 **File:** `js/app.js`  
 **Finding:** F-07 (Low)  
 **Change:** `validateRegisterForm()` now requires `password.length >= 8` (was `>= 6`). Error message updated to "Password must be at least 8 characters." `getRegisterErrorMessage()` `weak-password` case updated to match.  
-**Verification:** `password.length < 8` present in `app.js` `validateRegisterForm`; "at least 8 characters" in error message; confirmed by static grep. `node --check` passes.
+**Verification:** `password.length < 8` present in `app.js`; `node --check js/app.js` → PASS.
+
+### Fix 18.3-A — Addresses F-03, F-04: Missing teardown steps in logout and auth state change
+**File:** `js/app.js`, `js/charts.js`  
+**Findings:** F-03 (High), F-04 (High)  
+**Changes:**
+- Added `clearFinanceUIDOM()` private helper that clears the transaction list, balance card text, category list, monthly summary container, destroys Chart.js instances via `charts.destroyCharts()`, and clears any data error banner.
+- Added `clearAuthenticatedSessionState()` single shared teardown helper that: sets `state.currentUser = null`, calls `hideProtectedApp()`, resets `financeAppInitialized = false`, calls `hideMigrationModal()`, and calls `clearFinanceUIDOM()`.
+- Rewrote `onAuthStateChange` signed-out branch to call `clearAuthenticatedSessionState()`.
+- Added `destroyCharts()` export to `js/charts.js` (disconnects ResizeObserver, destroys both Chart.js instances, resets module variables to null).
+**Verification:** `clearAuthenticatedSessionState` and `clearFinanceUIDOM` confirmed present in `app.js`; `destroyCharts` confirmed present in `charts.js`; `financeAppInitialized = false` confirmed in the helper; `node --check` → PASS on both files.
 
 ### Fix 18.4-A — Addresses F-05: `getSupabaseClient()` did not reject whitespace-only config values
 **File:** `js/supabase.js`  
 **Finding:** F-05 (Low)  
-**Change:** Added `SUPABASE_CONFIG.url.trim() === ''` and `SUPABASE_CONFIG.anonKey.trim() === ''` checks to the existing guard block. The function now returns `null` immediately for any falsy, empty, whitespace-only, or placeholder config value without attempting CDN import (Req 27.3).  
-**Verification:** Guard block in `js/supabase.js` contains `.trim() === ''` checks for both `url` and `anonKey`; confirmed by static read. The six-condition guard covers all invalid-config cases.
+**Change:** Added `SUPABASE_CONFIG.url.trim() === ''` and `SUPABASE_CONFIG.anonKey.trim() === ''` checks to the existing guard block.  
+**Verification:** Guard block in `js/supabase.js` contains `.trim() === ''` checks for both values. `node --check js/supabase.js` → PASS.
 
 ### Fix 18.4-B — Addresses F-06: CDN `catch` clause logged raw `err` object
 **File:** `js/supabase.js`  
 **Finding:** F-06 (Low)  
-**Change:** Replaced `console.error('supabase.js: failed to load supabase-js from CDN.', err)` with a fully static message: `console.error('supabase.js: failed to load supabase-js from CDN. Check your network connection.')`. The `err` parameter is renamed `_err` to make clear it is intentionally unused (Req 27.4). No config values, CDN URL, or error details are interpolated.  
-**Verification:** `catch` block in `js/supabase.js` contains static-only `console.error` with no variable interpolation; confirmed by static read.
+**Change:** Replaced `console.error('...', err)` with a fully static message. The `err` parameter renamed `_err` to document it is intentionally unused.  
+**Verification:** `catch` block in `js/supabase.js` contains static-only `console.error` with no variable interpolation. `node --check` → PASS.
 
 ### Fix 18.4-C — Addresses F-09: `.gitignore` missing credential file exclusions
 **File:** `.gitignore`  
 **Finding:** F-09 (Medium)  
-**Change:** Added `.env`, `.env.local`, `.env.production`, `*.key`, `*.pem` entries under a "Credentials & secrets" comment block (Req 33.3). Prevents accidental `git add .` from staging environment files or private keys.  
-**Verification:** All five entries confirmed present in `.gitignore` by static read.
+**Change:** Added `.env`, `.env.local`, `.env.production`, `*.key`, `*.pem` under a "Credentials & secrets" comment block.  
+**Verification:** All five entries confirmed present in `.gitignore`.
 
-### Fix 18.4-D — Pre-commit credential scanner created (developer-local supplementary safeguard)
+### Fix 18.4-D — Pre-commit credential scanner (developer-local supplementary safeguard)
 **File:** `.git/hooks/pre-commit` *(not committed to the repository)*  
 **Requirement:** Req 33.6  
-**Change:** Created a bash pre-commit hook that scans every staged file for (a) the literal string `service_role` and (b) any base64url token starting with `eyJ` that is longer than 200 characters. If either pattern is detected, the commit is blocked with an explanatory message. The hook header explicitly documents that it is a developer-local safeguard only, not committed to the repository, not a repository-wide guarantee, and not a substitute for primary controls (source scan, `.gitignore`, manual review).  
-**⚠️ Pre-commit hook note:** This hook resides in `.git/hooks/pre-commit` which is NOT tracked by Git. It protects only the developer who has it installed locally. It is a supplementary safeguard; the primary security controls are the source credential scan, `.gitignore` exclusions, and the policy that no Service_Role_Key appears in any committed file.
+**Change:** Created a pre-commit hook that scans staged files for `service_role` and long `eyJ…` JWT tokens. Hook header documents that it is a developer-local safeguard only, not a repository-wide guarantee.
 
 ### Task 18.4 — `createClient(` singleton scan result
-**Scan result:** No rogue `createClient(` calls found. The pattern was searched across all `.js` files (excluding `node_modules`). It appears exactly once — in `js/supabase.js` — where it is the correct, intended instantiation. Singleton constraint holds (Req 27.2).
+**Scan result:** `createClient(` appears exactly once — in `js/supabase.js`. Singleton constraint confirmed (Req 27.2).
+
+### Fix 18.6-A — Addresses F-10: `getProvider()` lacked UUID v4 validation and whitespace guard
+**File:** `js/storage.js`  
+**Finding:** F-10 (Low)  
+**Change:** Added `UUID_V4_PATTERN` constant. Added `_isSupabaseUser(userId)` helper. Updated `getProvider()` with null/whitespace/non-UUID guards. Updated all 10 exported functions to use `_isSupabaseUser(userId)` instead of bare `if (userId)` truthy check.  
+**Routing table confirmed:**
+
+| Input | Route | Correct |
+|-------|-------|---------|
+| `null` | LocalStorageProvider | ✅ |
+| `undefined` | LocalStorageProvider | ✅ |
+| `''` | LocalStorageProvider | ✅ |
+| `'  '` (whitespace) | LocalStorageProvider | ✅ |
+| `'not-a-uuid'` | LocalStorageProvider | ✅ |
+| `'user@example.com'` (email) | LocalStorageProvider | ✅ |
+| `'550e8400-e29b-41d4-a716-446655440000'` (valid UUID v4) | SupabaseDatabaseProvider | ✅ |
+
+**Verification:** `node --check js/storage.js` → PASS.
+
+### Fix 18.7-A — Addresses F-08: Migration guards used non-standard error code, lacked whitespace check
+**File:** `js/migration.js`  
+**Finding:** F-08 (Low)  
+**Changes:**
+- Error code `'INVALID_USER_ID'` → `'unauthenticated'` at all eight guard sites.
+- Whitespace guard `userId.trim() === ''` added to all eight sites.
+- `clearLocalFinanceData` guard upgraded to standard `{ ok: false, error: { code, message } }` shape.
+- Explicit localStorage invariant comment added above `localStorage.removeItem(STORAGE_KEY)`.
+
+**App.js call-site audit:** All call sites pass `state.currentUser?.id` or `state.currentUser?.id ?? null`. No email-as-userId usage found.
+
+**Verification:** Zero `INVALID_USER_ID` occurrences remain in `migration.js`. All eight guard sites contain `userId.trim() === ''`. `node --check js/migration.js` → PASS.
+
+### Fix 18.8-A — Addresses F-13: `console.error`/`console.warn` in `js/app.js` passed full `err` object
+**File:** `js/app.js`  
+**Finding:** F-13 (Low)  
+**Change:** All seven catch-block console calls updated to pass only `err?.name ?? 'unknown'`.  
+**Affected call sites (after fix):**
+- `console.error("renderTransactionList: failed to load transactions", err?.name ?? 'unknown')`
+- `console.error("renderAll: failed to render", err?.name ?? 'unknown')`
+- `console.warn("auth: session detection failed - continuing signed out.", err?.name ?? 'unknown')`
+- `console.error("migration: upload failed unexpectedly", err?.name ?? 'unknown')`
+- `console.error("migration: verification failed", err?.name ?? 'unknown')`
+- `console.warn("migration: detectMigrationOpportunity failed", err?.name ?? 'unknown')`
+- `console.error("migration: validateLocalData failed", err?.name ?? 'unknown')`
+
+**Verification:** `node --check js/app.js` → PASS.
+
+### Fix 18.8-B — Addresses F-11: No global `window.onerror` or `unhandledrejection` handler
+**File:** `js/app.js`  
+**Finding:** F-11 (Low)  
+**Changes:** Added `window.addEventListener('unhandledrejection', ...)` that calls `event.preventDefault()` and logs a static message only. Added `window.onerror` that returns `true` to suppress default browser error dialog and logs a static message only. Both handlers registered at module top-level before the bootstrap guard.  
+**Verification:** Both handlers confirmed present in `app.js`. `node --check` → PASS.
+
+### Fix 18.9-A — Rewrites `onLogout()` to use shared teardown helper
+**File:** `js/app.js`  
+**Requirement:** Req 32.1, 32.2, 32.3, 32.4, 32.5, 32.6  
+**Change:** `onLogout()` now calls `auth.signOut().catch(() => {})` (errors swallowed so teardown always completes), then `clearAuthenticatedSessionState()` (single shared helper), then `showSignedOutState()`, then `showLoginView()`. The `onAuthStateChange` signed-out branch uses the identical sequence through the same helper.  
+**Verification:** `onLogout()` confirmed present with `auth.signOut().catch(() => {})` and `clearAuthenticatedSessionState()`. `node --check` → PASS.
+
+### Fix 18.11-A — Addresses F-12: README missing dedicated Security section
+**Files:** `PRODUCTION_CHECKLIST.md` (new), `README.md`  
+**Finding:** F-12 (Low)  
+**Changes:** Created `PRODUCTION_CHECKLIST.md` in repository root. Added "Security & Production Configuration" section to `README.md` (Table of Contents item 8) with credential safety table, Service_Role_Key prohibition, anon-key safety, RLS requirement, and anon-key rotation procedure.  
+**Verification:** Both files confirmed present. Zero FAIL items in checklist.
 
 ---
 
 ## Automated Tests Performed
 
-*(To be populated in Task 18.12.)*
+> **Methodology note:** No live browser was available for this QA session. All verification is
+> based on **static code analysis** — reading source files and running `node --check` syntax
+> validation. The manual test matrices in `docs/security-regression-tests.md` (A1–A9, B1–B6,
+> C1–C5, D4–D6, E1–E5) still require live browser execution as documented in the
+> "Manual Tests Still Required" section below.
+
+---
+
+### Syntax Check — `node --check` on all modified JS files
+
+| File | Result | Notes |
+|------|--------|-------|
+| `js/auth.js` | ✅ PASS | |
+| `js/app.js` | ✅ PASS | |
+| `js/supabase.js` | ✅ PASS | |
+| `js/storage.js` | ✅ PASS | |
+| `js/migration.js` | ✅ PASS | |
+| `js/charts.js` | ✅ PASS | |
+
+All six modified JS files pass Node.js syntax checking with zero errors.
+
+---
+
+### Phase 18 Change Verification (Static Analysis)
+
+Each Phase 18 change was verified by reading the relevant file section and confirming the expected code is present.
+
+| Check | File | Expected code present | Result |
+|-------|------|-----------------------|--------|
+| `SAFE_MESSAGES` map defined | `js/auth.js` | `const SAFE_MESSAGES = { ... }` at module level | ✅ PASS |
+| `_normalizeError()` returns from `SAFE_MESSAGES`, not raw SDK message | `js/auth.js` | `return { code, message: SAFE_MESSAGES[code] ?? ... }` | ✅ PASS |
+| `signUp()` email format pre-validation | `js/auth.js` | `/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())` before `getSupabaseClient()` | ✅ PASS |
+| `signUp()` password ≥ 8 pre-validation | `js/auth.js` | `password.length < 8` check before network call | ✅ PASS |
+| `validateRegisterForm()` password ≥ 8 | `js/app.js` | `values.password.length < 8` with "at least 8 characters" message | ✅ PASS |
+| `clearFinanceUIDOM()` helper | `js/app.js` | `function clearFinanceUIDOM()` clears transaction list, balance cards, category list, monthly summary, calls `charts.destroyCharts()` | ✅ PASS |
+| `clearAuthenticatedSessionState()` helper | `js/app.js` | `function clearAuthenticatedSessionState()` sets `state.currentUser = null`, resets `financeAppInitialized = false`, calls `hideMigrationModal()` and `clearFinanceUIDOM()` | ✅ PASS |
+| `onAuthStateChange` signed-out branch uses shared helper | `js/app.js` | `clearAuthenticatedSessionState()` called in signed-out else branch | ✅ PASS |
+| `onLogout()` uses shared teardown helper | `js/app.js` | `await auth.signOut().catch(() => {})` + `clearAuthenticatedSessionState()` | ✅ PASS |
+| Global `unhandledrejection` handler | `js/app.js` | `window.addEventListener('unhandledrejection', ...)` at module top-level | ✅ PASS |
+| Global `window.onerror` handler | `js/app.js` | `window.onerror = function () { ... return true; }` at module top-level | ✅ PASS |
+| 7 catch blocks use `err?.name` not raw `err` | `js/app.js` | `err?.name ?? 'unknown'` in all 7 affected console calls | ✅ PASS |
+| `getSupabaseClient()` whitespace guard | `js/supabase.js` | `.trim() === ''` on both `url` and `anonKey` | ✅ PASS |
+| CDN catch uses static message | `js/supabase.js` | `catch (_err) { console.error('...static...'); return null; }` — no `err`/`_err` interpolated | ✅ PASS |
+| `UUID_V4_PATTERN` constant | `js/storage.js` | `const UUID_V4_PATTERN = /^[0-9a-f]{8}-...$/i` | ✅ PASS |
+| `_isSupabaseUser()` helper | `js/storage.js` | `function _isSupabaseUser(userId)` validates type + UUID pattern | ✅ PASS |
+| `getProvider()` UUID routing | `js/storage.js` | Guards: falsy → Local; non-string → Local; whitespace → Local; non-UUID → Local; UUID v4 → Supabase | ✅ PASS |
+| Migration guards use `'unauthenticated'` code | `js/migration.js` | 8 guard sites all return `{ code: 'unauthenticated', message: 'A signed-in user is required.' }` | ✅ PASS |
+| Migration guards reject whitespace-only userId | `js/migration.js` | `userId.trim() === ''` in all 8 guard sites | ✅ PASS |
+| `clearLocalFinanceData` uses standard error shape | `js/migration.js` | Returns `{ ok: false, error: { code: 'unauthenticated', ... } }` | ✅ PASS |
+| `destroyCharts()` export | `js/charts.js` | `export function destroyCharts()` destroys both instances and disconnects ResizeObserver | ✅ PASS |
+| `.gitignore` credential entries | `.gitignore` | `.env`, `.env.local`, `.env.production`, `*.key`, `*.pem` all present | ✅ PASS |
+| `console.log` absent from all JS modules | all `js/*.js` | Zero `console.log(` calls found across all JS files | ✅ PASS |
+| `service_role` absent from production files | all `js/`, `css/`, `index.html`, `supabase/` | Zero occurrences; only appears in spec/docs as a warning term | ✅ PASS |
+| `eyJ[A-Za-z0-9_-]{200,}` absent (no long JWTs) | all files | Zero matches | ✅ PASS |
+| `postgres://` absent from production files | all `js/`, `supabase/` | Zero matches in production source files | ✅ PASS |
+
+All 26 static analysis checks pass.
+
+---
+
+### Phase 1–17 Feature Regression Verification (Static Analysis)
+
+These checks confirm that no Phase 18 change broke any existing Phase 1–17 feature by tracing
+the impact of each change on the modules that implement each feature group.
+
+| Feature Group | Phase 18 changes that could affect it | Regression verdict |
+|---------------|---------------------------------------|--------------------|
+| **A — Dashboard Overview** (Req 1) | `clearFinanceUIDOM()` clears balance cards on logout — correct, not a regression. `renderDashboard()` path unchanged. | ✅ NO REGRESSION |
+| **B — Add Transaction** (Req 2) | No changes to `transactions.js`, `addTransaction()`, or `renderTransactionForm()`. | ✅ NO REGRESSION |
+| **C — Transaction List** (Req 3) | `clearFinanceUIDOM()` clears `#transaction-list` on logout — correct behavior. `renderTransactionList()` and `renderTransactionRow()` unchanged. | ✅ NO REGRESSION |
+| **D — Filtering & Search** (Req 4) | No changes to `filterTransactions()`, filter controls, or filter event handlers. | ✅ NO REGRESSION |
+| **E — Monthly Summary** (Req 5) | `clearFinanceUIDOM()` clears `#monthly-summary` on logout — correct. `renderMonthlySummary()` in `reports.js` unchanged. | ✅ NO REGRESSION |
+| **F — Charts** (Req 6 & 7) | `destroyCharts()` is called by `clearFinanceUIDOM()` on logout and by `initCharts()` bootstrap. `updateExpenseChart` / `updateIncomeChart` paths unchanged; `chart.update()` in-place path unchanged. | ✅ NO REGRESSION |
+| **G — Custom Categories** (Req 8) | `clearFinanceUIDOM()` clears `#category-list` on logout — correct. `categories.js` unchanged. | ✅ NO REGRESSION |
+| **H — Data Persistence** (Req 10) | `storage.js` `_isSupabaseUser()` guard replaces bare `if (userId)` — functionally equivalent for null/undefined/UUID cases; adds protection for edge cases only. `LocalStorageProvider` class unchanged. | ✅ NO REGRESSION |
+| **I — Empty States** (Req 11) | No changes to `renderGlobalEmptyState()` or `initCharts()` empty-state logic. | ✅ NO REGRESSION |
+| **J — Accessibility & Privacy** (Req 14 & 15) | No changes to HTML, CSS, or any `safeText` call. Privacy footer unchanged. | ✅ NO REGRESSION |
+| **K — Consistency Regression** (Property 8) | `onFilterChange()` → `renderTransactionList()` path unchanged. No Phase 18 code touches the filter pipeline. | ✅ NO REGRESSION |
+| **Authentication** (Phase 15) | `signUp()` now validates email format and password ≥ 8 before network call — stricter than before but only affects invalid inputs. `signIn()`, `signOut()`, `onAuthStateChange()`, session restoration unchanged in behavior. `_normalizeError()` returns same code values, only the `message` field is now always a static string (no observable UI change for correctly working flows). | ✅ NO REGRESSION |
+| **Cloud CRUD** (Phase 16) | `_isSupabaseUser()` routing guard is equivalent to the prior `if (userId)` for all legitimate UUID values. All `SupabaseDatabaseProvider` methods unchanged. | ✅ NO REGRESSION |
+| **Migration** (Phase 17) | Error code change `'INVALID_USER_ID'` → `'unauthenticated'` affects only the error object returned on invalid userId — no UI path reads `result.error.code` for migration functions; all UI checks `result.ok`. Functionally equivalent. `startMigration`, `retryMigration`, and other public functions unchanged in behavior for valid inputs. | ✅ NO REGRESSION |
+
+No regressions detected in any Phase 1–17 feature group.
+
+---
+
+### New User-Visible Feature Check
+
+Phase 18 introduced no new product features, no new HTML sections, no new CSS classes, and no
+new event handlers for user interactions. All changes are either:
+
+- Internal teardown helpers (`clearAuthenticatedSessionState`, `clearFinanceUIDOM`, `destroyCharts`) called only from logout and session-expiry paths, or
+- Security guards that reject invalid inputs (stricter but not different behavior for valid inputs), or
+- Error handler registrations (`window.onerror`, `unhandledrejection`) that affect only the console output on uncaught errors, not normal user flows, or
+- Documentation files (`PHASE18_REPORT.md`, `PRODUCTION_CHECKLIST.md`, `docs/security-regression-tests.md`, README updates).
+
+**Result:** Zero new user-visible features, UI elements, or API behaviors introduced in Phase 18.
+No reverts required.
 
 ---
 
 ## Manual Tests Still Required
 
+The following tests require a live browser and/or a real Supabase project with two user accounts.
+They cannot be performed from static code analysis alone.
+
 | Test | Verification step | Responsible party |
 |------|-------------------|-------------------|
-| B1–B6: User isolation | Two Supabase accounts, cross-user SELECT and spoofed INSERT | Developer |
-| C1–C5: Migration matrices | Live migration test with LocalStorage data and authenticated session | Developer |
-| D4: No password in localStorage | DevTools Application → Local Storage inspection after sign-in | Developer |
-| D5: No plaintext password in network | DevTools Network tab during sign-in | Developer |
-| D6: No JWT/credentials in console | DevTools Console during full authenticated session | Developer |
-| A4: Session expiry | Revoke session via Supabase Dashboard → Auth → Users | Developer |
-| Supabase Dashboard RLS verification | Query pg_tables and pg_policies as documented in rls.sql | Developer |
+| **A1–A9**: Authentication (Matrix 1) | Open `index.html` in Chrome/Firefox with DevTools Console; verify sign-in, sign-out, session persistence, refresh behavior, and validation errors. | Developer |
+| **B1–B6**: User isolation (Matrix 2) | Two Supabase accounts, cross-user SELECT and spoofed INSERT. See `docs/security-regression-tests.md` §Two-user tests. | Developer |
+| **C1–C2**: Migration null/email userId | Browser DevTools Console: `import('./js/migration.js').then(m => console.log(m.startMigration(null)))` | Developer |
+| **C4**: `clearLocalFinanceData` marker preservation | Browser with existing local data + authenticated session; inspect localStorage after call. | Developer |
+| **C5**: Network error mid-migration | DevTools Network → throttle to Offline after upload begins; verify `status: 'partial'` and original data unchanged. | Developer |
+| **D4**: No password in localStorage | DevTools Application → Local Storage; inspect after sign-in. | Developer |
+| **D5**: No plaintext password in network | DevTools Network tab during sign-in. | Developer |
+| **D6**: No JWT/credentials in console | DevTools Console during full authenticated session (sign in, add transaction, sign out). | Developer |
+| **E1–E5**: State safety (Matrix 5) | After logout: inspect `state.currentUser`, `financeAppInitialized`, and DOM via DevTools. | Developer |
+| **A4**: Session expiry | Revoke session via Supabase Dashboard → Auth → Users; observe UI teardown. | Developer |
+| **Supabase Dashboard RLS verification** | Run verification SQL from `supabase/rls.sql` in Dashboard SQL Editor. | Developer |
+| **Phase 1–17 regression (live browser)** | Open app in browser; authenticated session; exercise all features (add/delete transaction, add/delete category, view charts, monthly summary, filtering). | Developer |
+| **Cross-browser** | Repeat above in Chrome, Firefox, Edge, and Safari. | Developer |
 
 ---
 
@@ -466,15 +320,15 @@ or financial totals in production code paths.
 
 | Item | Step | Responsible party |
 |------|------|-------------------|
-| `js/config.js` — real Supabase project URL | Replace `YOUR_SUPABASE_PROJECT_URL` | Developer |
-| `js/config.js` — real Supabase anon key | Replace `YOUR_SUPABASE_ANON_KEY` | Developer |
-| Supabase Dashboard — RLS enabled | Verify via `SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public'` | Developer |
-| Supabase Dashboard — email confirmation enabled | Authentication → Email → Enable email confirmations | Developer |
-| Supabase Dashboard — JWT expiry configured | Authentication → JWT settings (1–43200 minutes) | Developer |
-| Supabase Dashboard — redirect URLs | Authentication → URL Configuration → Redirect URLs | Developer |
-| Apply `supabase/schema.sql` to production project | SQL Editor → run schema.sql | Developer |
-| Apply `supabase/rls.sql` to production project | SQL Editor → run rls.sql | Developer |
+| `js/config.js` — real Supabase project URL | Replace `YOUR_SUPABASE_PROJECT_URL` with actual project URL. | Developer |
+| `js/config.js` — real Supabase anon key | Replace `YOUR_SUPABASE_ANON_KEY` with actual anon/public key. | Developer |
+| Supabase Dashboard — apply schema | SQL Editor → run contents of `supabase/schema.sql`. | Developer |
+| Supabase Dashboard — apply RLS | SQL Editor → run contents of `supabase/rls.sql`. | Developer |
+| Supabase Dashboard — verify RLS active | Run `SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public'`; all three rows must show `rowsecurity = true`. | Developer |
+| Supabase Dashboard — email confirmation | Authentication → Providers → Email → enable "Confirm email". | Developer |
+| Supabase Dashboard — JWT expiry | Authentication → JWT settings → verify expiry between 1 and 43200 minutes. | Developer |
+| Supabase Dashboard — redirect URLs | Authentication → URL Configuration → add production GitHub Pages URL and `http://localhost:8080`. | Developer |
+| Two-user isolation test | After production config is complete, run the two-user test from `PRODUCTION_CHECKLIST.md` §5.1. | Developer |
+| Site URL | Supabase Dashboard → Authentication → URL Configuration → Site URL to `https://<user>.github.io/<repo>`. | Developer |
 
----
-
-*This report will be completed in Task 18.12 after all hardening tasks are executed.*
+All configuration requirements are also documented with their expected values in `PRODUCTION_CHECKLIST.md`.

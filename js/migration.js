@@ -701,7 +701,7 @@ function _transactionsAreIdentical(local, cloud) {
  * }>}
  */
 export async function detectMigrationOpportunity(userId) {
-  if (!userId || typeof userId !== 'string') {
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
     console.warn('migration: detectMigrationOpportunity called without a valid userId.');
     return { needed: false, localCount: 0, cloudCount: 0, scenario: 'none', currentStatus: MIGRATION_STATUS.NOT_NEEDED };
   }
@@ -882,8 +882,8 @@ export async function detectMigrationOpportunity(userId) {
  * }>}
  */
 export async function startMigration(userId, _options) {
-  // ---- Precondition 1: userId must be a valid non-empty string ----
-  if (!userId || typeof userId !== 'string') {
+  // ---- Precondition 1: userId must be a valid non-empty, non-whitespace string (Req 30.1) ----
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
     return {
       ok:               false,
       migratedCount:    0,
@@ -894,8 +894,8 @@ export async function startMigration(userId, _options) {
       existingIds:      [],
       failed:           [],
       errors: [{
-        code:    'INVALID_USER_ID',
-        message: 'userId must be a non-empty string (Supabase UUID). Migration aborted.',
+        code:    'unauthenticated',
+        message: 'A signed-in user is required.',
       }],
       status: MIGRATION_STATUS.FAILED,
     };
@@ -1183,8 +1183,8 @@ export async function startMigration(userId, _options) {
  * }>}
  */
 export async function retryMigration(userId) {
-  // ---- Precondition: valid userId ----
-  if (!userId || typeof userId !== 'string') {
+  // ---- Precondition: valid userId — non-empty, non-whitespace string (Req 30.1) ----
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
     return {
       ok:               false,
       migratedCount:    0,
@@ -1195,8 +1195,8 @@ export async function retryMigration(userId) {
       existingIds:      [],
       failed:           [],
       errors: [{
-        code:    'INVALID_USER_ID',
-        message: 'userId must be a non-empty string (Supabase UUID). Retry aborted.',
+        code:    'unauthenticated',
+        message: 'A signed-in user is required.',
       }],
       status: MIGRATION_STATUS.FAILED,
     };
@@ -1267,8 +1267,8 @@ export async function retryMigration(userId) {
  * }>}
  */
 export async function migrateCategoriesStep(userId) {
-  // ---- Precondition 1: valid userId ----
-  if (!userId || typeof userId !== 'string') {
+  // ---- Precondition 1: valid userId — non-empty, non-whitespace string (Req 30.1) ----
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
     return {
       ok:               false,
       migratedCount:    0,
@@ -1278,8 +1278,8 @@ export async function migrateCategoriesStep(userId) {
       migratedCategories: [],
       failed:           [],
       errors: [{
-        code:    'INVALID_USER_ID',
-        message: 'userId must be a non-empty string (Supabase UUID). Category migration aborted.',
+        code:    'unauthenticated',
+        message: 'A signed-in user is required.',
       }],
       status: MIGRATION_STATUS.FAILED,
     };
@@ -1468,13 +1468,13 @@ export async function verifyMigration(userId) {
     },
   });
 
-  // ---- Precondition: valid userId ----
-  if (!userId || typeof userId !== 'string') {
+  // ---- Precondition: valid userId — non-empty, non-whitespace string (Req 30.1) ----
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
     return {
       ...emptyResult(false),
       error: {
-        code:    'INVALID_USER_ID',
-        message: 'userId must be a non-empty string (Supabase UUID). Verification aborted.',
+        code:    'unauthenticated',
+        message: 'A signed-in user is required.',
       },
     };
   }
@@ -1661,13 +1661,13 @@ export async function verifyMigration(userId) {
  * }>}
  */
 export async function migrateSettingsStep(userId) {
-  // ---- Precondition: valid userId ----
-  if (!userId || typeof userId !== 'string') {
+  // ---- Precondition: valid userId — non-empty, non-whitespace string (Req 30.1) ----
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
     return {
       ok:    false,
       error: {
-        code:    'INVALID_USER_ID',
-        message: 'userId must be a non-empty string (Supabase UUID). Settings migration aborted.',
+        code:    'unauthenticated',
+        message: 'A signed-in user is required.',
       },
     };
   }
@@ -1769,13 +1769,13 @@ export async function migrateSettingsStep(userId) {
  * @returns {Promise<{ ok: boolean, error?: { code: string, message: string } }>}
  */
 export async function resolveCurrencyConflict(userId, chosenCurrency) {
-  // ---- Precondition: valid userId ----
-  if (!userId || typeof userId !== 'string') {
+  // ---- Precondition: valid userId — non-empty, non-whitespace string (Req 30.1) ----
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
     return {
       ok:    false,
       error: {
-        code:    'INVALID_USER_ID',
-        message: 'userId must be a non-empty string (Supabase UUID). Conflict resolution aborted.',
+        code:    'unauthenticated',
+        message: 'A signed-in user is required.',
       },
     };
   }
@@ -1859,13 +1859,20 @@ export async function resolveCurrencyConflict(userId, chosenCurrency) {
  *   the marker could not be confirmed as `completed` after the removal.
  */
 export function clearLocalFinanceData(userId) {
-  if (!userId || typeof userId !== 'string') {
+  // ---- Precondition: valid userId — non-empty, non-whitespace string (Req 30.1) ----
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
     console.warn('migration: clearLocalFinanceData called without a valid userId.');
-    return { ok: false };
+    return { ok: false, error: { code: 'unauthenticated', message: 'A signed-in user is required.' } };
   }
 
-  // Remove finance data only — the migration marker key is different and
-  // must NOT be touched here.
+  // Safety invariant (Req 30.5):
+  //   ONLY `STORAGE_KEY` ("financeTrackerData") is removed here.
+  //   The migration marker key (`financeTrackerMigration_${userId}`) is a
+  //   DIFFERENT localStorage key and MUST NOT be touched by this function.
+  //   After this call, `readMigrationMarker(userId)` must still return the
+  //   existing marker so future logins see `status: 'completed'` and skip
+  //   the migration modal. Never replace this line with `localStorage.clear()`
+  //   or any wildcard removal — the marker must survive.
   localStorage.removeItem(STORAGE_KEY);
 
   // Verify the marker still exists with status: completed so the caller can

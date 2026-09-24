@@ -138,7 +138,7 @@ real project, two-user isolation test, production deployment, online smoke test,
       prerequisite for the application's security
     - _Requirements: 27.1, 27.2, 27.3, 27.4, 27.5, 33.1, 33.3, 33.6_
 
-  - [ ] 18.5 Row Level Security & Multi-User Isolation — `supabase/rls.sql`, `js/supabase-storage.js`
+  - [x] 18.5 Row Level Security & Multi-User Isolation — `supabase/rls.sql`, `js/supabase-storage.js`
     - Review `supabase/rls.sql` and confirm it sets `ENABLE ROW LEVEL SECURITY` on
       all three tables (`transactions`, `categories`, `settings`) and that each
       table has exactly one `FOR ALL` policy scoped to `authenticated` with both
@@ -157,7 +157,7 @@ real project, two-user isolation test, production deployment, online smoke test,
       `PRODUCTION_CHECKLIST.md` under a "Manual Verification Steps" subsection
     - _Requirements: 28.1, 28.2, 28.3, 28.4, 28.5, 28.6, 28.7_
 
-  - [ ] 18.6 Storage Provider Security — `js/storage.js`
+  - [x] 18.6 Storage Provider Security — `js/storage.js`
     - Before implementing UUID v4 validation, inspect the actual Supabase Auth user
       ID format produced by the live project: read `js/auth.js` `_normalizeUser()`
       (returns `supabaseUser.id`) and read the Supabase documentation to confirm
@@ -190,7 +190,7 @@ real project, two-user isolation test, production deployment, online smoke test,
       document the source-integrity invariant in a JSDoc comment on `getProvider()`
     - _Requirements: 29.1, 29.2, 29.3, 29.4, 29.6_
 
-  - [ ] 18.7 Migration Security — `js/migration.js`
+  - [x] 18.7 Migration Security — `js/migration.js`
     - In all six public migration entry points (`startMigration`, `retryMigration`,
       `migrateCategoriesStep`, `migrateSettingsStep`, `verifyMigration`,
       `clearLocalFinanceData`), change the guard error code from `'INVALID_USER_ID'`
@@ -210,7 +210,7 @@ real project, two-user isolation test, production deployment, online smoke test,
       exists, fix it and document as a Security_Finding
     - _Requirements: 30.1, 30.2, 30.3, 30.4, 30.5, 30.6_
 
-  - [ ] 18.8 Error Handling & Data Leakage Prevention — all JS modules
+  - [x] 18.8 Error Handling & Data Leakage Prevention — all JS modules
     - Audit every `console.error` call in `js/supabase-storage.js` and confirm
       each logs only `error.code` (or `err?.name` for caught exceptions), never
       the full SDK error object or `error.message`; fix any call that logs more
@@ -243,7 +243,7 @@ real project, two-user isolation test, production deployment, online smoke test,
       or email — both are already clean; confirm via audit
     - _Requirements: 31.1, 31.2, 31.3, 31.4, 31.5, 31.6, 31.7, 31.8_
 
-  - [ ] 18.9 Logout & State Cleanup — `js/app.js`
+  - [x] 18.9 Logout & State Cleanup — `js/app.js`
     - Rewrite `onLogout()` to use `clearAuthenticatedSessionState()` (implemented
       in task 18.3) so there is only one teardown implementation; the new
       `onLogout()` is:
@@ -269,7 +269,7 @@ real project, two-user isolation test, production deployment, online smoke test,
       single teardown sequence with no duplication
     - _Requirements: 32.1, 32.2, 32.3, 32.4, 32.5, 32.6_
 
-  - [ ] 18.10 Security Regression Test Matrix — documentation
+  - [x] 18.10 Security Regression Test Matrix — documentation
     - Create `docs/security-regression-tests.md` containing all five test matrices
       from design §Task 18.10, formatted as tables with columns: ID, Test
       description, Expected result, and Status (initially blank for manual tests):
@@ -286,7 +286,7 @@ real project, two-user isolation test, production deployment, online smoke test,
       executed via code
     - _Requirements: 34.1, 34.5_
 
-  - [ ] 18.11 Production Security Checklist — `PRODUCTION_CHECKLIST.md`
+  - [x] 18.11 Production Security Checklist — `PRODUCTION_CHECKLIST.md`
     - Create `PRODUCTION_CHECKLIST.md` in the repository root with all four
       sections from design §Task 18.11: Supabase Configuration, Application
       Security, Repository Hygiene, Deployment
@@ -309,7 +309,7 @@ real project, two-user isolation test, production deployment, online smoke test,
       rotate the anon key if accidentally exposed
     - _Requirements: 33.1, 33.2, 33.3, 33.4, 33.5, 33.6, 34.1, 34.2, 34.3_
 
-  - [ ] 18.12 Final QA & Phase 18 Report — `PHASE18_REPORT.md`, `README.md`
+  - [x] 18.12 Final QA & Phase 18 Report — `PHASE18_REPORT.md`, `README.md`
     - Open `index.html` in Chrome/Firefox with DevTools Console open; verify zero
       JavaScript errors on load, on sign-in, on sign-out, and on each major
       interaction (add transaction, delete transaction, add category, change

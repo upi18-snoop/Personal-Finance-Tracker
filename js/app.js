@@ -331,7 +331,7 @@ async function renderTransactionList() {
     dashboard.renderTransactionListRows(filtered, emptyMessage, state.selectedCurrency);
     addDeleteControls();
   } catch (err) {
-    console.error("renderTransactionList: failed to load transactions", err);
+    console.error("renderTransactionList: failed to load transactions", err?.name ?? 'unknown');
     showDataError("Could not load data. Please check your connection.");
   } finally {
     hideListLoading();
@@ -579,7 +579,7 @@ async function renderAll() {
     // List scope: keep the Transaction_List in sync with the same change.
     await renderTransactionList();
   } catch (err) {
-    console.error("renderAll: failed to render", err);
+    console.error("renderAll: failed to render", err?.name ?? 'unknown');
     showDataError("Could not load data. Please check your connection.");
   }
 }
@@ -1440,16 +1440,31 @@ function showSignedOutState() {
 }
 
 /**
- * Handle a logout request (task 15.5, Req 19.3).
+ * Handle a logout request (task 15.5, Req 19.3; hardened task 18.9, Req 32.1–32.6).
+ *
+ * Teardown sequence:
+ *   1. auth.signOut()  — attempt session end; errors are swallowed so teardown always
+ *                        completes regardless of network failures (Req 32.5).
+ *   2. clearAuthenticatedSessionState() — single shared teardown helper: sets
+ *                        state.currentUser = null first, hides #app-main, resets
+ *                        financeAppInitialized, closes migration modal, clears DOM
+ *                        (Req 32.1, 32.2, 32.3, 32.4, 32.6).
+ *   3. showSignedOutState() — updates header to signed-out appearance.
+ *                        NOTE: also sets state.currentUser = null internally —
+ *                        intentional belt-and-suspenders redundancy with step 2.
+ *   4. showLoginView()  — reveal the login form.
+ *
  * @returns {void}
  */
 function onLogout() {
   (async () => {
-    await auth.signOut();
-    showSignedOutState();
-    const appMain = document.getElementById("app-main");
-    if (appMain) appMain.hidden = true;
-    showLoginView();
+    // Attempt session end; proceed with teardown regardless of result (Req 32.5).
+    await auth.signOut().catch(() => {});
+    clearAuthenticatedSessionState();   // single shared teardown helper
+    // showSignedOutState() also sets state.currentUser = null — intentional
+    // belt-and-suspenders redundancy with clearAuthenticatedSessionState() above.
+    showSignedOutState();               // update header
+    showLoginView();                    // show login form
   })();
 }
 
@@ -1784,7 +1799,7 @@ async function initAuthSession() {
     }
     return state.currentUser;
   } catch (err) {
-    console.warn("auth: session detection failed - continuing signed out.", err);
+    console.warn("auth: session detection failed - continuing signed out.", err?.name ?? 'unknown');
     state.currentUser = null;
     return null;
   }
@@ -2174,7 +2189,7 @@ async function runMigrationUpload(mode, userId) {
       ? await migration.retryMigration(userId)
       : await migration.startMigration(userId);
   } catch (err) {
-    console.error("migration: upload failed unexpectedly", err);
+    console.error("migration: upload failed unexpectedly", err?.name ?? 'unknown');
     populateMigrationFailedState("An unexpected error occurred during import. Please try again.");
     showMigrationState("failed");
     return;
@@ -2228,7 +2243,7 @@ async function finishMigrationWithVerification(userId, migratedCount) {
   try {
     verification = await migration.verifyMigration(userId);
   } catch (err) {
-    console.error("migration: verification failed", err);
+    console.error("migration: verification failed", err?.name ?? 'unknown');
     verification = { verified: false };
   }
 
@@ -2250,7 +2265,7 @@ async function checkAndShowMigrationUI(userId) {
   try {
     opportunity = await migration.detectMigrationOpportunity(userId);
   } catch (err) {
-    console.warn("migration: detectMigrationOpportunity failed", err);
+    console.warn("migration: detectMigrationOpportunity failed", err?.name ?? 'unknown');
     return;
   }
 
@@ -2294,7 +2309,7 @@ function wireMigrationUI() {
         try {
           validationResult = migration.validateLocalData();
         } catch (err) {
-          console.error("migration: validateLocalData failed", err);
+          console.error("migration: validateLocalData failed", err?.name ?? 'unknown');
           populateMigrationFailedState("Could not validate local data. Please try again.");
           showMigrationState("failed");
           return;
@@ -2490,6 +2505,31 @@ async function bootstrap() {
 
 // Run bootstrap once the DOM is ready. The module script is deferred, so the
 // DOM may already be parsed by the time this executes.
+
+// ---------------------------------------------------------------------------
+// Global error suppression handlers (Task 18.8 — Req 31.8)
+// Installed before bootstrap() runs so no unhandled rejection or uncaught
+// error can escape with raw details during or after initialization.
+// Both handlers log a static message to preserve DevTools debugging
+// capability without leaking stack traces, error messages, or SDK internals.
+// ---------------------------------------------------------------------------
+
+window.addEventListener('unhandledrejection', (event) => {
+  // (a) Prevent default browser error reporting which may expose raw details.
+  event.preventDefault();
+  // (b) Log a static message only — never event.reason or any derived value.
+  console.warn('app: unhandled promise rejection (suppressed for security)');
+  // (c) Never write event.reason to any DOM element, never call alert().
+});
+
+window.onerror = function () {
+  // (a) Log only a static message — never the raw error arguments.
+  console.warn('app: uncaught error (suppressed for security)');
+  // (b) Return true to suppress the default browser error dialog.
+  return true;
+  // (c) Never write raw error details to DOM or call alert().
+};
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => void bootstrap());
 } else {

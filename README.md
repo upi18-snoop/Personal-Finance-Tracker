@@ -15,9 +15,10 @@ browser, with no backend, no account, and no installation required.
 5. [Browser Compatibility](#browser-compatibility)
 6. [Project Structure](#project-structure)
 7. [Privacy Statement](#privacy-statement)
-8. [Future Architecture](#future-architecture)
-9. [Manual Test Results](#manual-test-results)
-10. [Known Issues and Observations](#known-issues-and-observations)
+8. [Security & Production Configuration](#security--production-configuration)
+9. [Future Architecture](#future-architecture)
+10. [Manual Test Results](#manual-test-results)
+11. [Known Issues and Observations](#known-issues-and-observations)
 
 ---
 
@@ -200,6 +201,81 @@ It is **never sent to any external server**.
 The only outbound network request this application makes is loading the Chart.js library from
 `cdn.jsdelivr.net` on the first page load. No financial data is included in or transmitted with
 that request. After the library is cached, the app works fully offline.
+
+---
+
+## Security & Production Configuration
+
+> **Phase 18 — Security & Session Hardening** (completed). This section summarises the
+> security model, deployment requirements, and key rotation procedure for maintainers.
+
+### Credential Safety Rules
+
+| Credential | Safe to commit? | Rationale |
+|------------|----------------|-----------|
+| Supabase Project URL | ✅ Yes | Public identifier; no privileges |
+| Supabase Anon Key | ✅ Yes | Publishable key; RLS enforces data access restrictions |
+| **Supabase Service_Role Key** | ❌ **NEVER** | Bypasses all Row Level Security; full database access |
+| Database password | ❌ NEVER | Direct database access |
+| JWT secret | ❌ NEVER | Can forge authentication tokens |
+
+#### The Service_Role Key must never appear in this codebase
+
+The Service_Role Key is not needed anywhere in this application. It bypasses all Row Level
+Security policies and would give any user with access to the source code unrestricted read and
+write access to every user's financial data. It must:
+
+- Never be placed in `js/config.js` or any other committed file.
+- Never be placed in `.env`, `.env.local`, or any file in the repository directory.
+- Only be used in server-side scripts that run in a secured, non-public environment.
+
+#### The Anon Key is safe to commit
+
+The `anonKey` in `js/config.js` is the Supabase publishable/anon API key. It is designed for
+client-side use and identifies the project to Supabase. It carries **no privileges** beyond
+what Row Level Security policies explicitly allow — which is nothing for the `anon` role on
+this project's tables. Committing it to a public repository is intentional and correct.
+
+### Row Level Security (RLS) Must Be Enabled Before Going Live
+
+Every table in this application (`transactions`, `categories`, `settings`) has Row Level
+Security policies in `supabase/rls.sql` that restrict all read and write access to the
+owning user. **RLS must be applied to the live Supabase project before the application
+accepts real user data.** Without RLS, any authenticated user could read or modify any
+other user's financial records.
+
+To apply: in the Supabase Dashboard → SQL Editor, run the contents of `supabase/rls.sql`.
+To verify: run the SQL queries documented in `PRODUCTION_CHECKLIST.md` §5.5.
+
+### Rotating the Anon Key if Accidentally Exposed
+
+Although the anon key is safe to commit under normal circumstances, if it is accidentally
+combined with a Service_Role Key in the same commit or if the Supabase project's RLS
+policies are misconfigured, rotating it is a prudent safeguard:
+
+1. Go to **Supabase Dashboard → Project Settings → API → Project API Keys**.
+2. Click **"Reveal"** next to the `anon / public` key to confirm which value to rotate.
+3. Contact Supabase support or use the dashboard's key-rotation feature to generate a
+   new anon key (the interface varies by Supabase plan).
+4. Update `js/config.js` with the new `anonKey` value.
+5. Redeploy the application to GitHub Pages (push to `main`).
+6. The old key becomes invalid immediately; existing user sessions will be refreshed
+   against the new key automatically by `supabase-js`.
+
+> **Note:** Rotating the anon key does not affect user data. All data is stored in the
+> Supabase database under each user's UUID; the anon key is only used to identify the project.
+
+### Production Deployment Checklist
+
+Before going live, complete all items in `PRODUCTION_CHECKLIST.md` at the repository root.
+Key items that require manual action:
+
+- Replace placeholder values in `js/config.js` with real Supabase credentials.
+- Apply `supabase/schema.sql` and `supabase/rls.sql` to the live Supabase project.
+- Enable email confirmation in Supabase Dashboard → Authentication → Providers → Email.
+- Configure Site URL and Redirect URLs in Supabase Dashboard → Authentication → URL Configuration.
+- Verify RLS is active using the verification queries in `PRODUCTION_CHECKLIST.md` §5.5.
+- Run the two-user isolation test documented in `PRODUCTION_CHECKLIST.md` §5.1.
 
 ---
 
@@ -1965,3 +2041,88 @@ your cloud account after your first login.
 - Your local data is **never deleted automatically** — only if you explicitly click
   "Clear local data" after a successful import
 - Once migration is complete, the import prompt will not appear again on future logins
+
+---
+
+## Phase 18 — Security & Session Hardening
+
+Phase 18 is a hardening-only phase. It introduced no new product features or user-visible
+behavior. Every change either fixes a confirmed security finding or adds a protective guard.
+
+### What changed in Phase 18
+
+**`js/auth.js`**
+- `_normalizeError()` now returns only static safe messages from a `SAFE_MESSAGES` map.
+  Raw Supabase SDK error text never escapes the function.
+- `signUp()` validates email format and enforces password ≥ 8 characters before any network
+  call, returning `{ ok: false, error: { code: 'validation-error' } }` on failure.
+
+**`js/app.js`**
+- `clearFinanceUIDOM()` — new private helper that wipes all Finance_UI DOM content (transaction
+  list, balance cards, category list, monthly summary, charts) on logout or session expiry.
+- `clearAuthenticatedSessionState()` — single shared teardown helper used by both `onLogout()`
+  and the `onAuthStateChange` signed-out branch. Ensures `state.currentUser = null`,
+  `financeAppInitialized = false`, migration modal closed, and Finance_UI DOM cleared every time
+  a session ends, regardless of the trigger.
+- `onLogout()` rewritten to call `auth.signOut().catch(() => {})` (always completes teardown
+  even if sign-out fails) then the shared teardown helper.
+- 7 catch-block `console.error`/`console.warn` calls updated to log only `err?.name ?? 'unknown'`
+  instead of the full error object.
+- `window.onerror` and `window.addEventListener('unhandledrejection')` global handlers added
+  to suppress raw error details from the browser console and dialog.
+- Registration password minimum raised from 6 to 8 characters to match `auth.js`.
+
+**`js/supabase.js`**
+- `getSupabaseClient()` now rejects empty-string and whitespace-only config values in addition
+  to placeholder strings.
+- CDN load failure catch block logs a static message only — no error object or config value
+  is interpolated.
+
+**`js/storage.js`**
+- `UUID_V4_PATTERN` constant and `_isSupabaseUser()` helper added.
+- `getProvider()` and all 10 exported functions hardened: `userId` must be a valid UUID v4
+  string to route to Supabase; null, undefined, whitespace, and non-UUID strings all route to
+  LocalStorage.
+
+**`js/migration.js`**
+- All eight `userId` guard sites updated: error code `'INVALID_USER_ID'` → `'unauthenticated'`;
+  whitespace-only strings now rejected; `clearLocalFinanceData` uses the standard error shape.
+- Explicit localStorage invariant comment added to document that the migration marker key is
+  never removed by `clearLocalFinanceData`.
+
+**`js/charts.js`**
+- `destroyCharts()` export added — destroys both Chart.js instances and disconnects the
+  ResizeObserver; called by `clearFinanceUIDOM()` on every logout.
+
+**`.gitignore`**
+- Added `.env`, `.env.local`, `.env.production`, `*.key`, `*.pem` to prevent accidental
+  credential commits.
+
+**New files**
+- `PRODUCTION_CHECKLIST.md` — production readiness checklist (Supabase configuration,
+  application security, repository hygiene, deployment); 31 PASS, 0 FAIL, 16 NEEDS MANUAL
+  VERIFICATION, 2 NOT CONFIGURED.
+- `docs/security-regression-tests.md` — five security regression test matrices (31 tests;
+  3 code-verifiable tests D1–D3 marked PASS from static analysis; 28 require browser/live
+  Supabase execution).
+- `PHASE18_REPORT.md` — full security audit report: 13 findings (F-01–F-13), all fixed or
+  accepted; static QA results; manual tests still required; production configuration checklist.
+
+### Security findings summary
+
+| ID | Severity | Description | Status |
+|----|----------|-------------|--------|
+| F-01 | Medium | `auth.js` `_normalizeError()` leaked raw SDK messages | ✅ Fixed |
+| F-03 | High | `onLogout()` missing `financeAppInitialized` reset and DOM clear (cross-user leak risk) | ✅ Fixed |
+| F-04 | High | `onAuthStateChange` signed-out branch missing same teardown steps | ✅ Fixed |
+| F-09 | Medium | `.gitignore` missing `.env*`, `*.key`, `*.pem` | ✅ Fixed |
+| F-02, F-05–F-08, F-10–F-13 | Low | Various hardening improvements (whitespace guards, static CDN log, UUID routing, migration error codes, global error handlers, stack trace leakage) | ✅ Fixed |
+
+### Phase 18 QA Status
+
+| Item | Status |
+|---|---|
+| Task 18.12 Final QA | ✅ **COMPLETE** (static QA; live browser execution pending credentials) |
+| Phase 18 Security & Session Hardening | ✅ **COMPLETE** (Tasks 18.1–18.12 all implemented and statically verified) |
+| Live Supabase integration tests | ⏳ Pending — requires real credentials and two test accounts |
+| Production deployment | ⏳ Pending — complete `PRODUCTION_CHECKLIST.md` before going live |

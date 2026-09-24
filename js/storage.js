@@ -58,21 +58,68 @@ const DEFAULT_INCOME_CATEGORIES = [
 // ---------------------------------------------------------------------------
 
 /**
+ * UUID v4 pattern used to validate Supabase Auth user IDs before routing to
+ * the cloud provider. Supabase Auth always returns standard UUID v4 values
+ * (the `auth.users.id` column type is `UUID`). Any string that does not match
+ * this pattern is rejected and routed to LocalStorage instead of Supabase
+ * (Req 29.6), preventing accidental cloud calls with malformed identifiers.
+ *
+ * Confirmed: Supabase Auth `auth.uid()` always returns a UUID v4. The
+ * `auth.users.id` column is typed `UUID` in `supabase/schema.sql`, and
+ * `_normalizeUser()` in `js/auth.js` passes `supabaseUser.id` directly.
+ * See also: PHASE18_REPORT.md Finding F-10.
+ */
+const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
  * Return the active storage provider for the given userId.
- * A truthy userId → SupabaseDatabaseProvider (cloud, authenticated).
- * Null / undefined → LocalStorageProvider (localStorage, unauthenticated).
  *
- * A new provider instance is created per call. SupabaseDatabaseProvider is
- * stateless so this is free; LocalStorageProvider is also stateless.
+ * Routing table (Req 29.1, 29.2, 29.6):
+ *   null / undefined          → LocalStorageProvider
+ *   ''  (empty string)        → LocalStorageProvider
+ *   '  ' (whitespace-only)    → LocalStorageProvider
+ *   'not-a-uuid' (non-UUID)   → LocalStorageProvider
+ *   valid UUID v4             → SupabaseDatabaseProvider
  *
- * @param {string|null|undefined} userId
+ * Source-integrity invariant (Req 29.3):
+ *   The `userId` argument MUST originate from `state.currentUser.id` as set by
+ *   the `auth.onAuthStateChange` callback in `js/app.js`. No exported function
+ *   in this module reads `userId` from `localStorage`, URL parameters, query
+ *   strings, user-editable form fields, or any other untrusted source. The
+ *   caller is solely responsible for passing an authoritative identity value.
+ *
+ * A new provider instance is created per call. Both providers are stateless so
+ * this is allocation-free in practice.
+ *
+ * @param {string|null|undefined} userId  Supabase UUID from the auth session, or null.
  * @returns {SupabaseDatabaseProvider|LocalStorageProvider}
  */
 function getProvider(userId) {
-  if (userId) {
-    return new SupabaseDatabaseProvider();
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+    return new LocalStorageProvider();
   }
-  return new LocalStorageProvider();
+  if (!UUID_V4_PATTERN.test(userId)) {
+    return new LocalStorageProvider();
+  }
+  return new SupabaseDatabaseProvider();
+}
+
+/**
+ * Return true when `userId` is a valid UUID v4 that should route to Supabase.
+ * This is the single authoritative check used by all exported functions so that
+ * UUID v4 validation in getProvider() is not accidentally bypassed.
+ *
+ * Routing is identical to getProvider(): false → LocalStorage; true → Supabase.
+ *
+ * @param {unknown} userId
+ * @returns {boolean}
+ */
+function _isSupabaseUser(userId) {
+  return (
+    typeof userId === 'string' &&
+    userId.trim() !== '' &&
+    UUID_V4_PATTERN.test(userId)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +263,7 @@ function ensureDefaultCategories(data) {
  * @returns {Promise<object>} AppData
  */
 export async function initializeData(userId = null) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     const provider = new SupabaseDatabaseProvider();
     // Seed settings row on first login (idempotent).
     await provider.initializeUserData(userId);
@@ -249,7 +296,7 @@ export async function initializeData(userId = null) {
  * @returns {Promise<object>} AppData
  */
 export async function loadData(userId = null) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     const provider = new SupabaseDatabaseProvider();
     return _loadFromSupabase(provider, userId);
   }
@@ -271,7 +318,7 @@ export async function loadData(userId = null) {
  * @returns {Promise<void>}
  */
 export async function saveData(data, userId = null) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     // No-op for Supabase — individual CRUD functions handle persistence.
     return;
   }
@@ -288,7 +335,7 @@ export async function saveData(data, userId = null) {
  * @returns {Promise<void>}
  */
 export async function clearData(userId = null) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     return; // Not applicable for Supabase in v1.
   }
   _saveLocalSync(defaultData());
@@ -308,7 +355,7 @@ export async function clearData(userId = null) {
  * @returns {Promise<string>} ISO 4217 currency code
  */
 export async function getCurrency(userId = null) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     const provider = new SupabaseDatabaseProvider();
     const settings = await provider.getSettings(userId);
     const currency = settings?.currency;
@@ -342,7 +389,7 @@ export async function setCurrency(currency, userId = null) {
     return false;
   }
 
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     const provider = new SupabaseDatabaseProvider();
     const result = await provider.setSettings(userId, { currency });
     return result.ok === true;
@@ -372,7 +419,7 @@ export async function setCurrency(currency, userId = null) {
  * @returns {Promise<object[]>}
  */
 export async function getTransactions(userId = null) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     const provider = new SupabaseDatabaseProvider();
     return provider.getTransactions(userId);
   }
@@ -392,7 +439,7 @@ export async function getTransactions(userId = null) {
  * @returns {Promise<{ ok: true, transaction: object } | { ok: false, error: object }>}
  */
 export async function addTransaction(userId, transaction) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     const provider = new SupabaseDatabaseProvider();
     return provider.addTransaction(userId, transaction);
   }
@@ -418,7 +465,7 @@ export async function addTransaction(userId, transaction) {
  * @returns {Promise<{ ok: true } | { ok: false, error: object }>}
  */
 export async function deleteTransaction(userId, transactionId) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     const provider = new SupabaseDatabaseProvider();
     return provider.deleteTransaction(userId, transactionId);
   }
@@ -454,7 +501,7 @@ export async function deleteTransaction(userId, transactionId) {
  * @returns {Promise<Array<{ name: string, type: string }>>}
  */
 export async function getCustomCategories(userId = null) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     const provider = new SupabaseDatabaseProvider();
     return provider.getCustomCategories(userId);
   }
@@ -493,7 +540,7 @@ export async function getCustomCategories(userId = null) {
  * @returns {Promise<{ ok: true } | { ok: false, error: object }>}
  */
 export async function addCustomCategory(userId, category) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     const provider = new SupabaseDatabaseProvider();
     return provider.addCustomCategory(userId, category);
   }
@@ -523,7 +570,7 @@ export async function addCustomCategory(userId, category) {
  * @returns {Promise<{ ok: true } | { ok: false, error: object }>}
  */
 export async function deleteCustomCategory(userId, category) {
-  if (userId) {
+  if (_isSupabaseUser(userId)) {
     const provider = new SupabaseDatabaseProvider();
     return provider.deleteCustomCategory(userId, category);
   }
