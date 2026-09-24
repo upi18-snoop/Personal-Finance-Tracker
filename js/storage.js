@@ -6,27 +6,24 @@
  * initializeData/loadData/saveData/clearData API, corruption recovery, and the
  * StorageProvider abstraction that keeps a future backend swappable (Req 13).
  *
- * Layer: Storage. May import utils.js (shared leaf) only. Business logic and UI
- * depend on this module's functions, never on the provider classes.
+ * Layer: Storage. May import utils.js (shared leaf) and supabase-storage.js
+ * (infrastructure) only. Business logic and UI depend on this module's
+ * functions, never on the provider classes.
  *
- * Implemented scope:
- *   - 2.3: real Storage_Schema, defaultData(), and the
- *     initializeData/loadData/saveData/clearData API backed directly by
- *     localStorage.
- *   - 2.4: guaranteeing a loaded schema missing defaults gets them re-seeded.
- *   - 2.5: isValidSchema() + full JSON-parse/corruption recovery — missing,
- *     unreadable, or non-conforming stored data yields a valid default schema
- *     without throwing, and invalid stored data is recovered + re-persisted on
- *     startup.
- *   - 2.7: the StorageProvider seam (Req 13.5). LocalStorageProvider is the
- *     active v1 provider wrapping window.localStorage; readRaw/saveData/
- *     clearData route through it. GoogleSheetsProvider stays a documented,
- *     unconstructable placeholder (Req 13.2). Business logic and UI keep
- *     depending only on initializeData/loadData/saveData, never on a provider
- *     class, so a future backend swaps in with no changes above this layer.
+ * Task 16.5 additions:
+ *   - All public API functions are now async and accept an optional `userId`.
+ *   - Provider selection: a truthy `userId` routes to SupabaseDatabaseProvider;
+ *     null/undefined routes to LocalStorageProvider.
+ *   - New CRUD exports: getTransactions, addTransaction, deleteTransaction,
+ *     getCustomCategories, addCustomCategory, deleteCustomCategory — each
+ *     delegates to the correct provider.
+ *   - LocalStorageProvider class is unchanged — unauthenticated paths still work.
+ *   - The module-level `provider` singleton is replaced by a per-call
+ *     getProvider(userId) factory so authenticated users always get Supabase.
  */
 
 import { SUPPORTED_CURRENCIES } from "./utils.js";
+import { SupabaseDatabaseProvider } from "./supabase-storage.js";
 
 // Storage_Schema constants (Req 10.7). STORAGE_KEY is the single localStorage
 // key the whole app uses; SCHEMA_VERSION identifies the schema shape.
@@ -55,6 +52,32 @@ const DEFAULT_INCOME_CATEGORIES = [
   "Gift",
   "Other",
 ];
+
+// ---------------------------------------------------------------------------
+// Provider selection
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the active storage provider for the given userId.
+ * A truthy userId → SupabaseDatabaseProvider (cloud, authenticated).
+ * Null / undefined → LocalStorageProvider (localStorage, unauthenticated).
+ *
+ * A new provider instance is created per call. SupabaseDatabaseProvider is
+ * stateless so this is free; LocalStorageProvider is also stateless.
+ *
+ * @param {string|null|undefined} userId
+ * @returns {SupabaseDatabaseProvider|LocalStorageProvider}
+ */
+function getProvider(userId) {
+  if (userId) {
+    return new SupabaseDatabaseProvider();
+  }
+  return new LocalStorageProvider();
+}
+
+// ---------------------------------------------------------------------------
+// Schema helpers (used by the LocalStorage path only)
+// ---------------------------------------------------------------------------
 
 /**
  * A fresh, valid, empty AppData schema (Req 10.4/10.7). Seeds the default
@@ -124,41 +147,29 @@ export function isValidSchema(obj) {
 }
 
 /**
- * Load if present & valid, else create + persist a valid default schema
- * (Req 10.4/10.5/10.6).
- *
- * Startup recovery (task 2.5): on first run (nothing stored) this creates the
- * empty valid schema and persists it. If stored data is present but unreadable
- * (JSON parse failure) or non-conforming (fails isValidSchema), it falls back
- * to a fresh default schema and re-persists it so subsequent loads are stable —
- * without throwing. For a valid loaded schema, task 2.4's default-category
- * re-seeding still applies (persisting only when re-seeding changed something).
- * @returns {object} AppData
+ * Read + parse the raw stored value (localStorage only). Returns the parsed
+ * value, or null when there is nothing stored OR when the stored value is
+ * unreadable. JSON.parse is wrapped in try/catch so malformed/corrupted data
+ * resolves to null instead of throwing. Shape validation is the caller's job
+ * (via isValidSchema).
+ * @returns {*|null} parsed stored value, or null if missing/unreadable
  */
-export function initializeData() {
-  const existing = readRaw();
-
-  // Present and conforming: keep it, re-seeding defaults per task 2.4.
-  if (isValidSchema(existing)) {
-    const { data, changed } = ensureDefaultCategories(existing);
-    if (changed) {
-      saveData(data);
-    }
-    return data;
+function readRaw() {
+  const localProvider = new LocalStorageProvider();
+  const raw = localProvider.readRawSync();
+  if (raw === null || raw === undefined) {
+    return null;
   }
-
-  // First run (nothing stored) OR corrupt/invalid stored data: recover to a
-  // fresh valid default and persist it. Neither path throws.
-  const data = defaultData();
-  saveData(data);
-  return data;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Guarantee the default income/expense categories are present in a loaded
- * schema (Req 8.4; task 2.4). Any default missing from a given type is appended
- * (preserving default order first, then any custom categories already present).
- * Existing custom categories and ordering of already-present entries are kept.
+ * schema (Req 8.4; task 2.4). Any default missing from a given type is appended.
  * @param {object} data AppData (mutated in place and returned)
  * @returns {{ data: object, changed: boolean }}
  */
@@ -176,7 +187,6 @@ function ensureDefaultCategories(data) {
       : [];
     const missing = defaults.filter((name) => !current.includes(name));
     if (!Array.isArray(data.categories[type]) || missing.length > 0) {
-      // Defaults first (in their intentional order), then any custom entries.
       const custom = current.filter((name) => !defaults.includes(name));
       data.categories[type] = [...defaults, ...custom];
       changed = true;
@@ -189,49 +199,127 @@ function ensureDefaultCategories(data) {
   return { data, changed };
 }
 
+// ---------------------------------------------------------------------------
+// Core schema API — async, userId-routed
+// ---------------------------------------------------------------------------
+
 /**
- * Read persisted data from localStorage and return a valid schema
- * (Req 10.4/10.5/10.6; task 2.5). For any stored value that is missing,
- * unreadable (JSON parse failure, handled in readRaw), or non-conforming to the
- * Storage_Schema (fails isValidSchema), this returns a fresh valid default
- * AppData and NEVER throws (design Property 15).
- * @returns {object} AppData
+ * Initialize storage for the given user.
+ *
+ * Supabase path: calls initializeUserData to seed the settings row (idempotent),
+ * then loads and returns an AppData-shaped object assembled from cloud records.
+ *
+ * LocalStorage path: existing synchronous behaviour — load if valid, else seed
+ * default schema and persist.
+ *
+ * @param {string|null} [userId=null]
+ * @returns {Promise<object>} AppData
  */
-export function loadData() {
+export async function initializeData(userId = null) {
+  if (userId) {
+    const provider = new SupabaseDatabaseProvider();
+    // Seed settings row on first login (idempotent).
+    await provider.initializeUserData(userId);
+    // Assemble an AppData-shaped object from cloud records.
+    return _loadFromSupabase(provider, userId);
+  }
+
+  // ---- LocalStorage path (synchronous logic, wrapped in Promise) ----
+  const existing = readRaw();
+  if (isValidSchema(existing)) {
+    const { data, changed } = ensureDefaultCategories(existing);
+    if (changed) {
+      _saveLocalSync(data);
+    }
+    return data;
+  }
+
+  const data = defaultData();
+  _saveLocalSync(data);
+  return data;
+}
+
+/**
+ * Load the current AppData for the given user.
+ *
+ * Supabase path: assembles AppData shape from cloud records.
+ * LocalStorage path: reads, validates, falls back to default schema.
+ *
+ * @param {string|null} [userId=null]
+ * @returns {Promise<object>} AppData
+ */
+export async function loadData(userId = null) {
+  if (userId) {
+    const provider = new SupabaseDatabaseProvider();
+    return _loadFromSupabase(provider, userId);
+  }
+
   const existing = readRaw();
   return isValidSchema(existing) ? existing : defaultData();
 }
 
 /**
- * Persist the whole schema to localStorage (Req 10.1/10.3).
+ * Persist AppData for the given user.
+ *
+ * Supabase path: this is a no-op. Supabase uses individual record CRUD
+ * (addTransaction, deleteTransaction, etc.); bulk save does not apply.
+ *
+ * LocalStorage path: serialises and writes to localStorage.
+ *
  * @param {object} data AppData
- * @returns {void}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<void>}
  */
-export function saveData(data) {
-  provider.writeSync(data);
+export async function saveData(data, userId = null) {
+  if (userId) {
+    // No-op for Supabase — individual CRUD functions handle persistence.
+    return;
+  }
+  _saveLocalSync(data);
 }
 
 /**
- * Reset persisted state to a fresh default schema (Req 10.5; manual reset/tests).
- * @returns {void}
+ * Reset persisted state to a fresh default schema.
+ *
+ * Supabase path: no-op (clearing cloud data is not supported in v1).
+ * LocalStorage path: writes a fresh default schema.
+ *
+ * @param {string|null} [userId=null]
+ * @returns {Promise<void>}
  */
-export function clearData() {
-  saveData(defaultData());
+export async function clearData(userId = null) {
+  if (userId) {
+    return; // Not applicable for Supabase in v1.
+  }
+  _saveLocalSync(defaultData());
 }
+
+// ---------------------------------------------------------------------------
+// Currency API — async, userId-routed
+// ---------------------------------------------------------------------------
 
 /**
  * Return the user's currently selected currency code (Req 9.2).
  *
- * Backward-compatible: data stored before currency configuration was added
- * (no settings.currency field), invalid/missing settings, or a fresh
- * first-run all return the default "IDR".
+ * Supabase path: reads from the settings table.
+ * LocalStorage path: reads from the stored schema; defaults to "IDR".
  *
- * @returns {string} ISO 4217 currency code, defaults to "IDR"
+ * @param {string|null} [userId=null]
+ * @returns {Promise<string>} ISO 4217 currency code
  */
-export function getCurrency() {
-  const data = loadData();
+export async function getCurrency(userId = null) {
+  if (userId) {
+    const provider = new SupabaseDatabaseProvider();
+    const settings = await provider.getSettings(userId);
+    const currency = settings?.currency;
+    return (typeof currency === "string" && SUPPORTED_CURRENCIES[currency])
+      ? currency
+      : "IDR";
+  }
+
+  // ---- LocalStorage path ----
+  const data = _loadLocalSync();
   const currency = data?.settings?.currency;
-  // Only return codes present in SUPPORTED_CURRENCIES; anything else → "IDR".
   return (typeof currency === "string" && SUPPORTED_CURRENCIES[currency])
     ? currency
     : "IDR";
@@ -240,83 +328,316 @@ export function getCurrency() {
 /**
  * Persist the user's selected currency code (Req 9.2).
  *
- * Validates `currency` against SUPPORTED_CURRENCIES (the single source of
- * truth from utils.js). Invalid or unsupported codes are silently rejected —
- * the previously stored currency is preserved and no corruption occurs.
+ * Supabase path: upserts the settings row.
+ * LocalStorage path: updates the schema and persists.
  *
- * Changing the selected currency NEVER converts or mutates stored transaction
- * amounts (Req 9.3 — display-only concern handled by the render layer).
+ * Changing the currency NEVER converts stored transaction amounts (Req 9.3).
  *
  * @param {string} currency ISO 4217 currency code
- * @returns {boolean} true if persisted, false if rejected
+ * @param {string|null} [userId=null]
+ * @returns {Promise<boolean>} true if persisted, false if rejected
  */
-export function setCurrency(currency) {
+export async function setCurrency(currency, userId = null) {
   if (typeof currency !== "string" || !SUPPORTED_CURRENCIES[currency]) {
-    return false; // Reject unsupported/invalid codes — no mutation.
+    return false;
   }
-  const data = loadData();
+
+  if (userId) {
+    const provider = new SupabaseDatabaseProvider();
+    const result = await provider.setSettings(userId, { currency });
+    return result.ok === true;
+  }
+
+  // ---- LocalStorage path ----
+  const data = _loadLocalSync();
   if (!data.settings || typeof data.settings !== "object") {
     data.settings = {};
   }
   data.settings.currency = currency;
-  saveData(data);
+  _saveLocalSync(data);
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Transaction CRUD — async, userId-routed
+// ---------------------------------------------------------------------------
+
 /**
- * Read + parse the raw stored value. This is the single localStorage read point
- * for the module. Returns the parsed value, or null when there is nothing
- * stored OR when the stored value is unreadable (task 2.5): the JSON.parse is
- * wrapped in try/catch so malformed/corrupted data resolves to null instead of
- * throwing. Shape validation of the parsed value is the caller's job (via
- * isValidSchema).
- * @returns {*|null} parsed stored value, or null if missing/unreadable
+ * Return all transactions for the given user.
+ *
+ * Supabase path: fetches from the transactions table.
+ * LocalStorage path: returns the transactions array from the stored schema.
+ *
+ * @param {string|null} [userId=null]
+ * @returns {Promise<object[]>}
  */
-function readRaw() {
-  const raw = provider.readRawSync();
-  if (raw === null || raw === undefined) {
-    return null;
+export async function getTransactions(userId = null) {
+  if (userId) {
+    const provider = new SupabaseDatabaseProvider();
+    return provider.getTransactions(userId);
   }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    // Corrupted / non-JSON stored value — treat as "no readable data".
-    return null;
-  }
+
+  const data = _loadLocalSync();
+  return Array.isArray(data.transactions) ? data.transactions : [];
 }
+
+/**
+ * Persist a new transaction for the given user.
+ *
+ * Supabase path: inserts a row via the transactions table.
+ * LocalStorage path: appends to the stored transactions array and saves.
+ *
+ * @param {string|null} userId
+ * @param {object} transaction Well-formed transaction object (all required fields present).
+ * @returns {Promise<{ ok: true, transaction: object } | { ok: false, error: object }>}
+ */
+export async function addTransaction(userId, transaction) {
+  if (userId) {
+    const provider = new SupabaseDatabaseProvider();
+    return provider.addTransaction(userId, transaction);
+  }
+
+  // ---- LocalStorage path ----
+  const data = _loadLocalSync();
+  if (!Array.isArray(data.transactions)) {
+    data.transactions = [];
+  }
+  data.transactions.push(transaction);
+  _saveLocalSync(data);
+  return { ok: true, transaction };
+}
+
+/**
+ * Delete a transaction by ID for the given user.
+ *
+ * Supabase path: deletes the row from the transactions table.
+ * LocalStorage path: filters the transaction out of the stored array and saves.
+ *
+ * @param {string|null} userId
+ * @param {string} transactionId
+ * @returns {Promise<{ ok: true } | { ok: false, error: object }>}
+ */
+export async function deleteTransaction(userId, transactionId) {
+  if (userId) {
+    const provider = new SupabaseDatabaseProvider();
+    return provider.deleteTransaction(userId, transactionId);
+  }
+
+  // ---- LocalStorage path ----
+  const data = _loadLocalSync();
+  const list = Array.isArray(data.transactions) ? data.transactions : [];
+  const remaining = list.filter((tx) => !(tx && tx.id === transactionId));
+
+  if (remaining.length === list.length) {
+    return { ok: false, error: { code: "not-found", message: "Transaction not found." } };
+  }
+
+  data.transactions = remaining;
+  _saveLocalSync(data);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Category CRUD — async, userId-routed
+// ---------------------------------------------------------------------------
+
+/**
+ * Return all custom (non-default) categories for the given user.
+ *
+ * Supabase path: fetches from the categories table (default categories are JS
+ * constants and are never stored in Supabase).
+ *
+ * LocalStorage path: reads the stored schema and returns categories that are
+ * NOT in the default lists. Returns objects of shape { name, type }.
+ *
+ * @param {string|null} [userId=null]
+ * @returns {Promise<Array<{ name: string, type: string }>>}
+ */
+export async function getCustomCategories(userId = null) {
+  if (userId) {
+    const provider = new SupabaseDatabaseProvider();
+    return provider.getCustomCategories(userId);
+  }
+
+  // ---- LocalStorage path ----
+  const data = _loadLocalSync();
+  const defaultExpenseSet = new Set(DEFAULT_EXPENSE_CATEGORIES);
+  const defaultIncomeSet  = new Set(DEFAULT_INCOME_CATEGORIES);
+  const result = [];
+
+  if (Array.isArray(data.categories?.income)) {
+    for (const name of data.categories.income) {
+      if (!defaultIncomeSet.has(name)) {
+        result.push({ name, type: "income" });
+      }
+    }
+  }
+  if (Array.isArray(data.categories?.expense)) {
+    for (const name of data.categories.expense) {
+      if (!defaultExpenseSet.has(name)) {
+        result.push({ name, type: "expense" });
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Add a custom category for the given user.
+ *
+ * Supabase path: inserts a row into the categories table.
+ * LocalStorage path: appends to the appropriate type array in the stored schema.
+ *
+ * @param {string|null} userId
+ * @param {{ name: string, type: string }} category
+ * @returns {Promise<{ ok: true } | { ok: false, error: object }>}
+ */
+export async function addCustomCategory(userId, category) {
+  if (userId) {
+    const provider = new SupabaseDatabaseProvider();
+    return provider.addCustomCategory(userId, category);
+  }
+
+  // ---- LocalStorage path ----
+  const data = _loadLocalSync();
+  const type = category.type;
+  if (!data.categories || typeof data.categories !== "object") {
+    data.categories = { income: [...DEFAULT_INCOME_CATEGORIES], expense: [...DEFAULT_EXPENSE_CATEGORIES] };
+  }
+  if (!Array.isArray(data.categories[type])) {
+    data.categories[type] = type === "income" ? [...DEFAULT_INCOME_CATEGORIES] : [...DEFAULT_EXPENSE_CATEGORIES];
+  }
+  data.categories[type].push(category.name.trim());
+  _saveLocalSync(data);
+  return { ok: true };
+}
+
+/**
+ * Delete a custom category for the given user by name and type.
+ *
+ * Supabase path: deletes the row from the categories table.
+ * LocalStorage path: filters the name from the appropriate type array and saves.
+ *
+ * @param {string|null} userId
+ * @param {{ name: string, type: string }} category
+ * @returns {Promise<{ ok: true } | { ok: false, error: object }>}
+ */
+export async function deleteCustomCategory(userId, category) {
+  if (userId) {
+    const provider = new SupabaseDatabaseProvider();
+    return provider.deleteCustomCategory(userId, category);
+  }
+
+  // ---- LocalStorage path ----
+  const data = _loadLocalSync();
+  const type = category.type;
+  if (Array.isArray(data.categories?.[type])) {
+    data.categories[type] = data.categories[type].filter((c) => c !== category.name);
+    _saveLocalSync(data);
+  }
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// LocalStorage sync helpers (used internally — not exported)
+// ---------------------------------------------------------------------------
+
+/**
+ * Synchronous localStorage read + JSON parse + schema validation.
+ * Returns parsed AppData or defaultData() on any failure. Never throws.
+ * @returns {object} AppData
+ */
+function _loadLocalSync() {
+  const existing = readRaw();
+  return isValidSchema(existing) ? existing : defaultData();
+}
+
+/**
+ * Synchronous localStorage write. Delegates to a LocalStorageProvider instance.
+ * @param {object} data AppData
+ */
+function _saveLocalSync(data) {
+  const localProvider = new LocalStorageProvider();
+  localProvider.writeSync(data);
+}
+
+// ---------------------------------------------------------------------------
+// Supabase assembly helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Load all user data from Supabase and assemble it into an AppData-shaped
+ * object. This keeps callers (business logic, UI) working with the same schema
+ * shape regardless of which backend is active.
+ *
+ * The AppData shape returned:
+ * {
+ *   version: SCHEMA_VERSION,
+ *   transactions: [...],        // from Supabase transactions table
+ *   categories: {
+ *     income:  [...defaults, ...customIncome],
+ *     expense: [...defaults, ...customExpense],
+ *   },
+ *   settings: { currency: '...' }
+ * }
+ *
+ * @param {SupabaseDatabaseProvider} provider
+ * @param {string} userId
+ * @returns {Promise<object>} AppData
+ */
+async function _loadFromSupabase(provider, userId) {
+  // Fetch all three in parallel for performance.
+  const [transactions, customCategories, settings] = await Promise.all([
+    provider.getTransactions(userId),
+    provider.getCustomCategories(userId),
+    provider.getSettings(userId),
+  ]);
+
+  // Merge defaults with custom categories, preserving order.
+  const customIncome  = customCategories.filter((c) => c.type === "income").map((c) => c.name);
+  const customExpense = customCategories.filter((c) => c.type === "expense").map((c) => c.name);
+
+  return {
+    version: SCHEMA_VERSION,
+    transactions: Array.isArray(transactions) ? transactions : [],
+    categories: {
+      income:  [...DEFAULT_INCOME_CATEGORIES,  ...customIncome],
+      expense: [...DEFAULT_EXPENSE_CATEGORIES, ...customExpense],
+    },
+    settings: {
+      currency: (settings?.currency && SUPPORTED_CURRENCIES[settings.currency])
+        ? settings.currency
+        : "IDR",
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// StorageProvider classes — exported for extensibility (Req 13)
+// ---------------------------------------------------------------------------
 
 /*
  * StorageProvider abstraction (future-readiness, Req 13). Documented shape:
  *
  *   interface StorageProvider {
- *     read(): Promise<AppData | null>;   // parsed schema, or null if absent
+ *     read(): Promise<AppData | null>;
  *     write(data: AppData): Promise<void>;
  *     clear(): Promise<void>;
  *   }
  *
- * The interface is async so a network-backed provider (e.g. a cloud/Google
- * Sheets backend) can be plugged in later without changing any layer above
- * storage.js. Everything above this layer depends only on
- * initializeData/loadData/saveData — never on a provider class — so swapping
- * the active provider requires no changes above the storage layer (Req 13.5).
- *
- * v1 wrinkle: the module's public API (loadData/saveData/clearData) is
- * synchronous because all current business logic and UI are synchronous. So the
- * active v1 provider (LocalStorageProvider) additionally exposes synchronous
- * companions (readRawSync/writeSync/clearSync) that storage.js uses directly.
- * The async read/write/clear methods are the documented seam a future provider
- * implements; in LocalStorageProvider they simply delegate to the sync path.
+ * The interface is async so a network-backed provider can be plugged in later
+ * without changing any layer above storage.js. Everything above this layer
+ * depends only on the exported functions — never on a provider class — so
+ * swapping requires no changes above the storage layer (Req 13.5).
  */
 
 /**
  * Active v1 provider — the ONLY thing that touches window.localStorage
- * (Req 13.5, 14.1). Data is stored solely in the browser under STORAGE_KEY; no
- * network calls are ever made (Req 14.2).
+ * (Req 13.5, 14.1). Unchanged from the original implementation.
  */
 export class LocalStorageProvider {
   /**
-   * Synchronous raw read used by storage.js. Returns the raw stored string, or
-   * null when nothing is stored. JSON parsing/validation is the caller's job.
+   * Synchronous raw read. Returns the raw stored string, or null.
    * @returns {string|null}
    */
   readRawSync() {
@@ -325,7 +646,7 @@ export class LocalStorageProvider {
   }
 
   /**
-   * Synchronous write used by storage.js. Serializes and persists the schema.
+   * Synchronous write. Serialises and persists the schema.
    * @param {object} data AppData
    * @returns {void}
    */
@@ -334,22 +655,19 @@ export class LocalStorageProvider {
   }
 
   /**
-   * Synchronous clear used by storage.js — removes the stored key entirely.
+   * Synchronous clear — removes the stored key entirely.
    * @returns {void}
    */
   clearSync() {
     localStorage.removeItem(STORAGE_KEY);
   }
 
-  // --- Documented async StorageProvider interface (the future seam) ---
-  // In v1 these delegate to the synchronous path above.
+  // --- Documented async StorageProvider interface ---
 
   /** @returns {Promise<object|null>} parsed AppData, or null if absent/unreadable */
   async read() {
     const raw = this.readRawSync();
-    if (raw === null) {
-      return null;
-    }
+    if (raw === null) return null;
     try {
       return JSON.parse(raw);
     } catch {
@@ -371,18 +689,10 @@ export class LocalStorageProvider {
 /**
  * Placeholder ONLY — documents the future extension point (Req 13.1). NOT
  * implemented in v1 (Req 13.2): constructing it throws, and it is never wired
- * in anywhere. No sync logic, no network calls, no auth.
+ * in anywhere.
  */
 export class GoogleSheetsProvider {
   constructor() {
     throw new Error("Not implemented in v1");
   }
 }
-
-/**
- * The single active provider for v1. Selecting a different provider here is the
- * only change needed to swap backends — nothing above the storage layer refers
- * to a provider class (Req 13.5).
- * @type {LocalStorageProvider}
- */
-const provider = new LocalStorageProvider();

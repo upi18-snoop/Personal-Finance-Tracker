@@ -35,16 +35,22 @@ const DEFAULT_CATEGORIES = {
 
 /**
  * Resolve the selectable categories for a Transaction_Type (Req 2.3, 8.4).
- * Prefers `categories.getCategories(type)` (Phase 8); falls back to the built-in
- * defaults while that logic is still a stub.
+ * Returns a Promise that resolves to the category list. Prefers
+ * `categories.getCategories(type)` (async since task 16.6); falls back to the
+ * built-in defaults if the result is empty.
  * @param {"income"|"expense"} type
- * @returns {string[]}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<string[]>}
  */
-export function categoriesForType(type) {
+export async function categoriesForType(type, userId = null) {
   const key = type === "income" ? "income" : "expense";
-  const fromLogic = categories.getCategories(key);
-  if (Array.isArray(fromLogic) && fromLogic.length > 0) {
-    return fromLogic;
+  try {
+    const fromLogic = await categories.getCategories(key, userId);
+    if (Array.isArray(fromLogic) && fromLogic.length > 0) {
+      return fromLogic;
+    }
+  } catch {
+    // fall through to defaults
   }
   return DEFAULT_CATEGORIES[key];
 }
@@ -57,11 +63,12 @@ export function categoriesForType(type) {
  * injected as HTML. Preserves the current selection when it is still valid.
  * @param {HTMLSelectElement} selectEl
  * @param {"income"|"expense"} type
- * @returns {void}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<void>}
  */
-export function renderCategoryOptions(selectEl, type) {
+export async function renderCategoryOptions(selectEl, type, userId = null) {
   if (!selectEl) return;
-  const options = categoriesForType(type);
+  const options = await categoriesForType(type, userId);
   const previous = selectEl.value;
 
   selectEl.replaceChildren();
@@ -161,11 +168,12 @@ function renderMoneyValue(elementId, amount, currency = "IDR") {
  * recent-transactions list is rendered newest→oldest (Req 1.4).
  *
  * @param {object} state App state (reads `state.selectedMonth`, `state.selectedCurrency`).
- * @returns {void}
+ * @param {string|null} [userId=null] Optional user ID for async storage routing.
+ * @returns {Promise<void>}
  */
-export function renderDashboard(state) {
+export async function renderDashboard(state, userId = null) {
   const currency = (state && state.selectedCurrency) ? state.selectedCurrency : "IDR";
-  const allTransactions = transactions.getTransactions();
+  const allTransactions = await transactions.getTransactions(userId);
 
   // Totals from the single source of truth — dashboard never sums money itself.
   const totals = transactions.calculateTotals(allTransactions);

@@ -124,11 +124,12 @@ function renderCategoryBreakdown(listElementId, totalsMap, currency) {
  *
  * @param {string} monthKey "YYYY-MM" month key (the Selected_Month).
  * @param {string} [currency="IDR"] Active Selected_Currency for formatting.
- * @returns {void}
+ * @param {string|null} [userId=null] Optional user ID for async storage routing.
+ * @returns {Promise<void>}
  */
-export function renderMonthlySummary(monthKey, currency = "IDR") {
+export async function renderMonthlySummary(monthKey, currency = "IDR", userId = null) {
   // Month slice + totals from the single source of truth (Req 5.2, 1.5).
-  const monthSlice = transactions.getTransactionsByMonth(monthKey);
+  const monthSlice = await transactions.getTransactionsByMonth(monthKey, userId);
   const totals = transactions.calculateTotals(monthSlice);
 
   // Monthly income / expense / net balance, each formatted via the

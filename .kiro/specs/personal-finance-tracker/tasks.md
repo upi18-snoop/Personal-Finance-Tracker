@@ -1128,7 +1128,7 @@ broken or removed.
       - Field mapping is applied on both read (snake_case → camelCase) and write (camelCase → snake_case).
     - **Dependencies:** 16.3
 
-  - [ ] 16.5 Async Storage Interface
+  - [x] 16.5 Async Storage Interface
     - **Objective:** Make the `storage.js` public API async and add provider selection logic so authenticated users transparently use `SupabaseDatabaseProvider`.
     - **Requirements covered:** 20, 10, 13
     - **Files:** `js/storage.js`
@@ -1142,7 +1142,7 @@ broken or removed.
       - All public storage functions return Promises.
     - **Dependencies:** 16.4
 
-  - [ ] 16.6 Async Business Logic
+  - [x] 16.6 Async Business Logic
     - **Objective:** Make `transactions.js` and `categories.js` async throughout; thread `userId` (from `state.currentUser.id`) into all data operations.
     - **Requirements covered:** 20, 1–8 (all data-touching requirements)
     - **Files:** `js/transactions.js`, `js/categories.js`
@@ -1156,7 +1156,7 @@ broken or removed.
       - No business logic duplication.
     - **Dependencies:** 16.5
 
-  - [ ] 16.7 Async App Orchestration & Loading States
+  - [x] 16.7 Async App Orchestration & Loading States
     - **Objective:** Make `app.js` event handlers and render functions async; add loading states and graceful network-error handling.
     - **Requirements covered:** 20, 16 (performance), all UI requirements
     - **Files:** `js/app.js`

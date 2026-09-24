@@ -9,17 +9,16 @@
  * Layer: Business logic. Imports storage.js and utils.js ONLY. Knows nothing
  * about the DOM.
  *
- * Implemented scope (task 3.1):
- *   - addTransaction(input): validates every field (Req 2.2/2.4–2.8) and, on
- *     success, builds a well-formed Transaction (Req 2.9), appends it to the
- *     stored set (Req 2.10), and persists via storage.saveData (Req 2.11).
- *     Invalid input is rejected with validation errors and NO state change.
- *   - getTransactions(): reads all stored transactions unmodified (Req 3.1).
- *   - calculateTotals(): the SINGLE source of truth for money math — the only
- *     place balance = totalIncome - totalExpense is computed (Req 1.5).
+ * Async update (task 16.6):
+ *   All storage-touching functions are now async and accept an optional userId
+ *   parameter (default null). A null userId routes to the LocalStorage path in
+ *   storage.js; a truthy userId routes to the Supabase path. The new storage
+ *   CRUD API (storage.addTransaction, storage.deleteTransaction,
+ *   storage.getTransactions) is used for persistence so the business layer no
+ *   longer needs to load-mutate-save the full schema.
  *
- * The remaining reads/view functions (getTransactionsByMonth, filterTransactions,
- * categoryTotals) stay stubs until their tasks (5.1, 6.1).
+ *   Pure functions (calculateTotals, filterTransactions, categoryTotals) are
+ *   unchanged and remain synchronous.
  */
 
 import * as storage from "./storage.js";
@@ -44,14 +43,14 @@ const TRANSACTION_TYPES = ["income", "expense"];
  *
  * On any failure it returns `{ ok: false, errors }` and makes NO change to
  * stored state. On success it builds a Transaction with a unique `id` and a
- * `createdAt` timestamp (Req 2.9), appends it to the stored transaction set
- * (Req 2.10), persists the whole schema through storage.saveData (Req 2.11),
- * and returns `{ ok: true, transaction }`.
+ * `createdAt` timestamp (Req 2.9), persists it via storage.addTransaction
+ * (Req 2.10, 2.11), and returns `{ ok: true, transaction }`.
  *
  * @param {object} input TransactionInput { type, itemName, amount, category, date }
- * @returns {{ ok: true, transaction: object } | { ok: false, errors: object[] }}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<{ ok: true, transaction: object } | { ok: false, errors: object[] }>}
  */
-export function addTransaction(input) {
+export async function addTransaction(input, userId = null) {
   const source = input && typeof input === "object" ? input : {};
   const errors = [];
 
@@ -103,10 +102,11 @@ export function addTransaction(input) {
     createdAt: new Date().toISOString(),
   };
 
-  // Append to the stored set (Req 2.10) and persist the whole schema (Req 2.11).
-  const data = storage.loadData();
-  data.transactions.push(transaction);
-  storage.saveData(data);
+  // Persist via the storage CRUD API (Req 2.10, 2.11).
+  const result = await storage.addTransaction(userId, transaction);
+  if (!result.ok) {
+    return { ok: false, errors: [{ field: "storage", message: "Failed to save transaction" }] };
+  }
 
   return { ok: true, transaction };
 }
@@ -131,41 +131,30 @@ function normalizeAmount(raw) {
 
 /**
  * Remove the transaction with the given id and persist the updated set
- * (Req 3.5, 3.6). Reads the stored schema through the storage layer, drops the
- * transaction whose `id` matches, and — only when something was actually
- * removed — persists the whole schema via storage.saveData. It is a no-op if no
- * transaction has the given id (nothing removed, nothing persisted).
+ * (Req 3.5, 3.6). Delegates to storage.deleteTransaction which finds and
+ * removes the transaction atomically. Returns `{ ok: true }` when the
+ * transaction was found and removed, `{ ok: false }` when the id was absent.
  *
- * Returns `{ ok: true }` when a matching transaction was found and removed,
- * `{ ok: false }` when the id was absent (per the design contract).
  * @param {string} id
- * @returns {{ ok: boolean }}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<{ ok: boolean }>}
  */
-export function deleteTransaction(id) {
-  const data = storage.loadData();
-  const list = Array.isArray(data.transactions) ? data.transactions : [];
-
-  const remaining = list.filter((tx) => !(tx && tx.id === id));
-
-  // No-op when the id is absent: nothing removed, nothing persisted (Req 3.4/3.6).
-  if (remaining.length === list.length) {
-    return { ok: false };
-  }
-
-  data.transactions = remaining;
-  storage.saveData(data);
-  return { ok: true };
+export async function deleteTransaction(id, userId = null) {
+  const result = await storage.deleteTransaction(userId, id);
+  return result.ok ? { ok: true } : { ok: false };
 }
 
 /**
  * All stored transactions, unmodified (Req 3.1). Reads through the storage
  * layer (never localStorage directly). Returns the stored array; callers that
  * need to sort/filter should copy first (the reporting/list views do).
- * @returns {object[]}
+ *
+ * @param {string|null} [userId=null]
+ * @returns {Promise<object[]>}
  */
-export function getTransactions() {
-  const data = storage.loadData();
-  return Array.isArray(data.transactions) ? data.transactions : [];
+export async function getTransactions(userId = null) {
+  const transactions = await storage.getTransactions(userId);
+  return Array.isArray(transactions) ? transactions : [];
 }
 
 /**
@@ -174,21 +163,24 @@ export function getTransactions() {
  * given month, using utils.isInMonth so month membership is decided in exactly
  * one place. Returns a NEW array (filter never mutates the stored set); an empty
  * or non-string monthKey matches nothing.
+ *
  * @param {string} monthKey
- * @returns {object[]}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<object[]>}
  */
-export function getTransactionsByMonth(monthKey) {
-  return getTransactions().filter(
-    (tx) => tx && utils.isInMonth(tx.date, monthKey)
-  );
+export async function getTransactionsByMonth(monthKey, userId = null) {
+  const all = await getTransactions(userId);
+  return all.filter((tx) => tx && utils.isInMonth(tx.date, monthKey));
 }
 
 /**
- * Money math — the SINGLE source of truth (Req 1.5).
- * @param {object[]} [transactions=getTransactions()]
+ * Money math — the SINGLE source of truth (Req 1.5). Pure and synchronous;
+ * callers are expected to pass the already-loaded transactions array.
+ *
+ * @param {object[]} [transactions=[]]
  * @returns {{ totalIncome: number, totalExpense: number, balance: number, count: number }}
  */
-export function calculateTotals(transactions = getTransactions()) {
+export function calculateTotals(transactions = []) {
   const list = Array.isArray(transactions) ? transactions : [];
 
   let totalIncome = 0;
@@ -277,6 +269,9 @@ export function filterTransactions(transactions, criteria) {
  * data cannot corrupt a total. This function does NOT drop zero-total entries —
  * with positive-only amounts (Req 2.6) no key can sum to zero, and callers are
  * responsible for dropping any zero-total categories (Req 6.2, 7.3).
+ *
+ * Pure and synchronous; callers pass the already-loaded transactions array.
+ *
  * @param {object[]} transactions
  * @param {"income"|"expense"} type
  * @returns {Map<string, number>}

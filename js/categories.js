@@ -8,22 +8,24 @@
  * Layer: Business logic. Imports storage.js and utils.js ONLY. Knows nothing
  * about the DOM.
  *
- * Implemented scope (task 8.1):
- *   - getCategories(type): merges default + persisted custom categories for
- *     the type (Req 8.4). Reads from storage via loadData; returns every
- *     category name in their stored order (defaults first, then custom).
- *   - addCategory(name, type): validates name (non-blank, no per-type duplicate)
- *     (Req 8.2); on success appends the name to data.categories[type] and
- *     persists the schema via storage.saveData (Req 8.3). Never adds to the
- *     other type's list.
- *   - validateCategory(name, type): pure helper used by addCategory and the UI
- *     for inline validation feedback.
- *   - isCategoryInUse(name, type): checks the stored transaction set for any
- *     transaction whose type AND category match (Req 8.7). Used by deleteCategory
- *     and available to the UI.
- *   - deleteCategory(name, type): guards that the category is not a default and
- *     not in use (Req 8.6, 8.7); removes it from data.categories[type] and
- *     persists on success. NEVER touches transactions (Req 8.8).
+ * Async update (task 16.6):
+ *   All storage-touching functions are now async and accept an optional userId
+ *   parameter (default null). A null userId routes to the LocalStorage path in
+ *   storage.js; a truthy userId routes to the Supabase path. The new storage
+ *   CRUD API (storage.addCustomCategory, storage.deleteCustomCategory,
+ *   storage.getTransactions) is used for persistence.
+ *
+ *   Pure helpers (_defaults, _isDefault) are unchanged and remain synchronous.
+ *
+ * Implemented scope (task 8.1, updated task 16.6):
+ *   - getCategories(type, userId): reads merged categories from storage.loadData
+ *     (which handles the Supabase assembly path internally).
+ *   - addCategory(name, type, userId): validates then persists via
+ *     storage.addCustomCategory.
+ *   - validateCategory(name, type, userId): async because it calls getCategories.
+ *   - isCategoryInUse(name, type, userId): reads via storage.getTransactions.
+ *   - deleteCategory(name, type, userId): guards defaults + in-use, then calls
+ *     storage.deleteCustomCategory.
  */
 
 import * as storage from "./storage.js";
@@ -74,7 +76,8 @@ const DEFAULTS_MAP = {
 /**
  * Return all categories for the given type — defaults merged with persisted
  * custom categories (Req 8.4). Reads the stored schema through the storage
- * layer; never touches localStorage directly.
+ * layer via storage.loadData; for the Supabase path, storage.loadData assembles
+ * the merged categories array internally so the return shape is identical.
  *
  * The persisted categories[type] array already contains both defaults (seeded
  * at start-up by storage.initializeData) and any custom categories the user
@@ -82,10 +85,11 @@ const DEFAULTS_MAP = {
  * is somehow absent (corrupt recovery), it falls back to defaults only.
  *
  * @param {"income"|"expense"} type
- * @returns {string[]}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<string[]>}
  */
-export function getCategories(type) {
-  const data = storage.loadData();
+export async function getCategories(type, userId = null) {
+  const data = await storage.loadData(userId);
   const cats = data.categories && Array.isArray(data.categories[type])
     ? data.categories[type]
     : _defaults(type);
@@ -99,32 +103,22 @@ export function getCategories(type) {
  *   - names that duplicate an existing category for the same type
  *     (case-sensitive, same comparison used by filterTransactions — error: "duplicate")
  *
- * On success, appends the trimmed name to data.categories[type] and persists
- * the updated schema via storage.saveData. The other type's list is untouched.
+ * On success, persists the new category via storage.addCustomCategory. The
+ * other type's list is untouched.
  *
  * @param {string} name
  * @param {"income"|"expense"} type
- * @returns {{ ok: true } | { ok: false, error: "duplicate" | "invalid" }}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<{ ok: true } | { ok: false, error: "duplicate" | "invalid" }>}
  */
-export function addCategory(name, type) {
-  const validation = validateCategory(name, type);
+export async function addCategory(name, type, userId = null) {
+  const validation = await validateCategory(name, type, userId);
   if (!validation.ok) {
     return { ok: false, error: validation.error };
   }
 
   const trimmed = name.trim();
-  const data = storage.loadData();
-
-  // Ensure the array exists (defensive, should always be seeded by storage).
-  if (!data.categories || typeof data.categories !== "object") {
-    data.categories = { income: [...DEFAULT_INCOME_CATEGORIES], expense: [...DEFAULT_EXPENSE_CATEGORIES] };
-  }
-  if (!Array.isArray(data.categories[type])) {
-    data.categories[type] = [..._defaults(type)];
-  }
-
-  data.categories[type].push(trimmed);
-  storage.saveData(data);
+  await storage.addCustomCategory(userId, { name: trimmed, type });
 
   return { ok: true };
 }
@@ -137,14 +131,15 @@ export function addCategory(name, type) {
  *   - error: "in-use"  — if any stored transaction references this category+type
  *     (Req 8.7); never deletes transactions in this case (Req 8.8).
  *
- * On success, removes the name from data.categories[type] and persists the
- * change. Transactions are NEVER modified or deleted (Req 8.8).
+ * On success, removes the category via storage.deleteCustomCategory. Transactions
+ * are NEVER modified or deleted (Req 8.8).
  *
  * @param {string} name
  * @param {"income"|"expense"} type
- * @returns {{ ok: true } | { ok: false, error: "in-use" | "default" }}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<{ ok: true } | { ok: false, error: "in-use" | "default" }>}
  */
-export function deleteCategory(name, type) {
+export async function deleteCategory(name, type, userId = null) {
   const trimmed = typeof name === "string" ? name.trim() : "";
 
   // Guard: defaults are not deletable (Req 8.6 implicit — only custom categories
@@ -154,44 +149,40 @@ export function deleteCategory(name, type) {
   }
 
   // Guard: refuse if any transaction references this category+type (Req 8.7).
-  if (isCategoryInUse(trimmed, type)) {
+  if (await isCategoryInUse(trimmed, type, userId)) {
     return { ok: false, error: "in-use" };
   }
 
-  const data = storage.loadData();
-
-  // Remove from the categories list. If the category wasn't there, this is a
-  // no-op (idempotent), still return ok:true since there is nothing to delete.
-  if (Array.isArray(data.categories && data.categories[type])) {
-    data.categories[type] = data.categories[type].filter((c) => c !== trimmed);
-    storage.saveData(data);
-  }
+  // Persist the deletion. If the category wasn't there, this is a no-op
+  // (idempotent), still return ok:true since there is nothing to delete.
+  await storage.deleteCustomCategory(userId, { name: trimmed, type });
 
   // Transactions are intentionally untouched (Req 8.8).
   return { ok: true };
 }
 
 /**
- * Validate a candidate category name for the given type. Pure helper used by
- * addCategory and by the UI for inline feedback.
+ * Validate a candidate category name for the given type. Called by addCategory
+ * and by the UI for inline feedback. Async because it calls getCategories.
  *
  * Returns:
- *   - { ok: true }                   — name is valid and unique for this type.
- *   - { ok: false, error: "invalid" } — name is blank or whitespace-only.
+ *   - { ok: true }                      — name is valid and unique for this type.
+ *   - { ok: false, error: "invalid" }   — name is blank or whitespace-only.
  *   - { ok: false, error: "duplicate" } — a category with this name (trimmed,
  *     case-sensitive) already exists for this type.
  *
  * @param {string} name
  * @param {"income"|"expense"} type
- * @returns {{ ok: boolean, error?: "duplicate" | "invalid" }}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<{ ok: boolean, error?: "duplicate" | "invalid" }>}
  */
-export function validateCategory(name, type) {
+export async function validateCategory(name, type, userId = null) {
   if (utils.isBlank(name)) {
     return { ok: false, error: "invalid" };
   }
 
   const trimmed = name.trim();
-  const existing = getCategories(type);
+  const existing = await getCategories(type, userId);
 
   // Case-sensitive duplicate check (category names are stored as-is).
   if (existing.includes(trimmed)) {
@@ -208,14 +199,15 @@ export function validateCategory(name, type) {
  *
  * @param {string} name
  * @param {"income"|"expense"} type
- * @returns {boolean}
+ * @param {string|null} [userId=null]
+ * @returns {Promise<boolean>}
  */
-export function isCategoryInUse(name, type) {
+export async function isCategoryInUse(name, type, userId = null) {
   const trimmed = typeof name === "string" ? name.trim() : "";
-  const data = storage.loadData();
-  const transactions = Array.isArray(data.transactions) ? data.transactions : [];
+  const transactions = await storage.getTransactions(userId);
+  const list = Array.isArray(transactions) ? transactions : [];
 
-  return transactions.some(
+  return list.some(
     (tx) => tx && tx.type === type && tx.category === trimmed
   );
 }

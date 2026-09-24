@@ -597,6 +597,30 @@
         "chatSessionId": "sess_0d48ee0a-febe-4e3c-8b14-16151679e871",
         "timestamp": 1790156501691
       }
+    ],
+    "16.5 Async Storage Interface": [
+      {
+        "executionId": "1a283d90-3ee3-46b5-8d2e-33722cf36c39",
+        "chatSessionId": "sess_71dfd5e8-8d13-47bf-8f8d-4c0b5b4b08f4",
+        "timestamp": 1790216954558
+      },
+      {
+        "executionId": "1a283d90-3ee3-46b5-8d2e-33722cf36c39",
+        "chatSessionId": "sess_71dfd5e8-8d13-47bf-8f8d-4c0b5b4b08f4",
+        "timestamp": 1790217132974
+      }
+    ],
+    "16.6 Async Business Logic": [
+      {
+        "executionId": "9965d872-d182-4e84-9367-9a066a55b0c5",
+        "chatSessionId": "sess_5f79f5af-925e-4b32-9c5f-7b4de1c44457",
+        "timestamp": 1790217335561
+      },
+      {
+        "executionId": "9965d872-d182-4e84-9367-9a066a55b0c5",
+        "chatSessionId": "sess_5f79f5af-925e-4b32-9c5f-7b4de1c44457",
+        "timestamp": 1790217512274
+      }
     ]
   }
 }
