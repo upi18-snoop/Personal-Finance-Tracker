@@ -35,6 +35,7 @@
 import {
   STORAGE_KEY,
   isValidSchema,
+  setCurrency,
 } from './storage.js';
 import { SupabaseDatabaseProvider } from './supabase-storage.js';
 import { SUPPORTED_CURRENCIES, isValidDate, isBlank } from './utils.js';
@@ -93,6 +94,28 @@ export const ISSUE_CODE = Object.freeze({
   NO_LOCAL_DATA:                 'NO_LOCAL_DATA',
   CORRUPTED_SCHEMA:              'CORRUPTED_SCHEMA',
 });
+
+// ---------------------------------------------------------------------------
+// MigrationConflict shape
+// ---------------------------------------------------------------------------
+
+/**
+ * Represents a single conflict detected during migration.
+ *
+ * - `transaction-data-conflict`: a transaction ID exists in both local and cloud
+ *   with differing content. The local record is NOT inserted; the caller decides
+ *   how to resolve it (Req 23.4, 23.7).
+ * - `currency-conflict`: local and cloud settings have different currency codes.
+ *   No currency is applied automatically; the caller must invoke
+ *   `resolveCurrencyConflict` after the user picks one (Req 23.6).
+ *
+ * @typedef {Object} MigrationConflict
+ * @property {'transaction-data-conflict'|'currency-conflict'} type
+ * @property {object}  [localRecord]  - Local transaction object (transaction-data-conflict only).
+ * @property {object}  [cloudRecord]  - Cloud transaction object (transaction-data-conflict only).
+ * @property {string}  [localValue]   - Local setting value (currency-conflict only).
+ * @property {string}  [cloudValue]   - Cloud setting value (currency-conflict only).
+ */
 
 // ---------------------------------------------------------------------------
 // Default category sets — mirrors storage.js and categories.js exactly.
@@ -166,7 +189,12 @@ export function writeMigrationMarker(userId, marker) {
 
 /**
  * Remove the migration marker from LocalStorage for the given user.
- * Only called when the user explicitly resets migration state.
+ *
+ * ⚠️  ONLY call this when the user explicitly resets their migration state
+ * (e.g. a "Reset migration" developer option). Do NOT call it after a
+ * successful migration or after clearing local finance data — the marker
+ * must survive both of those events so that future logins correctly see
+ * `status: 'completed'` and skip the migration modal.
  *
  * @param {string} userId - Authenticated Supabase user UUID.
  * @returns {void}
@@ -934,27 +962,85 @@ export async function startMigration(userId, _options) {
   // ---- Collect valid transactions to process ----
   const transactionsToProcess = validation.validTransactions;
 
+  // ---- Pre-fetch cloud transactions to enable conflict detection (Req 23.4, 23.7) ----
+  // Build a cloudById map for O(1) lookup during the upload loop.
+  // Network failure degrades gracefully to an empty map (same pattern as detectMigrationOpportunity).
+  const cloudById = new Map();
+  try {
+    const provider = new SupabaseDatabaseProvider();
+    const fetched  = await provider.getTransactions(userId);
+    const cloudTxs = Array.isArray(fetched) ? fetched : [];
+    for (const tx of cloudTxs) {
+      if (tx && typeof tx.id === 'string') {
+        cloudById.set(tx.id, tx);
+      }
+    }
+  } catch {
+    // Graceful degradation: if the cloud read fails, proceed without pre-check.
+    // The INSERT path will still surface duplicate errors from the provider.
+  }
+
   // ---- Upload loop ----
   const provider          = new SupabaseDatabaseProvider();
   const migratedIds       = [];
   const existingIds       = [];
   const failed            = [];
+  /** @type {MigrationConflict[]} */
+  const transactionConflicts = [];
   let   migratedCount     = 0;
   let   alreadyExistsCount = 0;
   let   failedCount       = 0;
+  let   conflictSkipCount = 0;
   let   networkStopped    = false;
 
   for (const tx of transactionsToProcess) {
     if (networkStopped) break;
 
+    // ---- Task 17.8: Skip IDs already recorded in the migration marker ----
+    // This avoids a network round-trip for already-migrated records on retry.
+    // The marker's migratedTransactionIds is authoritative for what this
+    // user session already uploaded; cloud duplicate detection is a fallback,
+    // not the primary skip mechanism.
+    const alreadyTrackedInMarker = Array.isArray(marker.migratedTransactionIds) &&
+      marker.migratedTransactionIds.includes(tx.id);
+    if (alreadyTrackedInMarker) {
+      existingIds.push(tx.id);
+      alreadyExistsCount++;
+      continue;
+    }
+
+    // ---- Conflict pre-check (Task 17.7) ----
+    // If the transaction ID already exists in cloud, compare content before inserting.
+    if (cloudById.has(tx.id)) {
+      const cloudTx = cloudById.get(tx.id);
+      if (_transactionsAreIdentical(tx, cloudTx)) {
+        // (c-identical) Same content — treat as already migrated; no re-insert needed.
+        existingIds.push(tx.id);
+        alreadyExistsCount++;
+      } else {
+        // (conflict) Same ID, different content — report conflict; do NOT insert.
+        transactionConflicts.push({
+          type:        'transaction-data-conflict',
+          localRecord: tx,
+          cloudRecord: cloudTx,
+        });
+        conflictSkipCount++;
+      }
+      continue; // skip the INSERT call entirely
+    }
+
+    // ---- Normal INSERT path ----
     const result = await provider.addTransaction(userId, tx);
 
     if (result.ok) {
       // (b) Successfully inserted.
       migratedIds.push(tx.id);
       migratedCount++;
+      // Task 17.8: persist progress immediately after each successful INSERT
+      marker.migratedTransactionIds.push(tx.id);
+      writeMigrationMarker(userId, marker);
     } else if (result.error && result.error.code === 'duplicate') {
-      // (c) Already exists in cloud — idempotent success.
+      // (c) Duplicate detected by cloud at insert time — idempotent success.
       existingIds.push(tx.id);
       alreadyExistsCount++;
     } else if (result.error && result.error.code === 'network-error') {
@@ -968,16 +1054,6 @@ export async function startMigration(userId, _options) {
       failedCount++;
     }
   }
-
-  // ---- Update marker with transaction results ----
-  // Append newly migrated IDs to the persistent list (never replace — idempotent accumulation).
-  const previouslyMigrated = Array.isArray(marker.migratedTransactionIds)
-    ? marker.migratedTransactionIds
-    : [];
-  marker.migratedTransactionIds = [
-    ...previouslyMigrated,
-    ...migratedIds,
-  ];
 
   // ---- Category migration step (only when transaction batch didn't hit a network stop) ----
   let categoryResult = null;
@@ -1003,6 +1079,53 @@ export async function startMigration(userId, _options) {
     }
   }
 
+  // ---- Settings migration step (only when no network stop has occurred) ----
+  let settingsResult = null;
+  // Unified conflicts array (MigrationConflict[]).
+  // Seed with any conflicts already persisted in the marker from a prior run.
+  /** @type {MigrationConflict[]} */
+  const conflicts = Array.isArray(marker.conflicts) ? [...marker.conflicts] : [];
+
+  // Append transaction-data-conflicts discovered in the upload loop above.
+  // These are added regardless of networkStopped — they were detected before
+  // any INSERT was attempted, so they are always valid to report.
+  conflicts.push(...transactionConflicts);
+
+  if (!networkStopped) {
+    // Persist marker before settings step so any interrupt sees up-to-date progress.
+    writeMigrationMarker(userId, marker);
+
+    settingsResult = await migrateSettingsStep(userId);
+
+    if (settingsResult.ok && settingsResult.conflict) {
+      // Currency conflict detected — normalize to the unified MigrationConflict
+      // shape (localValue / cloudValue) before storing (Req 23.6, 23.7).
+      // migrateSettingsStep returns { type, localCurrency, cloudCurrency };
+      // we map it to { type, localValue, cloudValue } for the caller.
+      const rawConflict = settingsResult.conflict;
+      conflicts.push({
+        type:       'currency-conflict',
+        localValue: rawConflict.localCurrency,
+        cloudValue: rawConflict.cloudCurrency,
+      });
+    } else if (!settingsResult.ok && !settingsResult.skipped) {
+      // Settings step returned a hard error — count it as a failure.
+      failedCount++;
+      failed.push({ id: 'settings', error: settingsResult.error || { code: 'unknown', message: 'Settings migration failed.' } });
+    }
+
+    // Sync marker after settings step (migrateSettingsStep writes the marker
+    // when it succeeds; read it back to stay in sync).
+    const refreshedMarker = readMigrationMarker(userId);
+    if (refreshedMarker) {
+      marker = refreshedMarker;
+    }
+
+    // Persist the full unified conflicts list into the marker.
+    marker.conflicts = conflicts;
+    writeMigrationMarker(userId, marker);
+  }
+
   // ---- Status: PARTIAL when anything failed or a network stop occurred ----
   const finalStatus = (failedCount > 0 || networkStopped)
     ? MIGRATION_STATUS.PARTIAL
@@ -1016,13 +1139,17 @@ export async function startMigration(userId, _options) {
     migratedCount,
     alreadyExistsCount,
     failedCount,
-    skippedCount:     validation.invalidTransactions ? validation.invalidTransactions.length : 0,
+    // skippedCount covers both schema-invalid transactions AND conflict-skipped ones (Req 23.4).
+    skippedCount:     (validation.invalidTransactions ? validation.invalidTransactions.length : 0) + conflictSkipCount,
     migratedIds,
     existingIds,
     failed,
     errors:           [],
     status:           finalStatus,
-    categoryResult,   // attached for callers that want category-step details
+    /** @type {MigrationConflict[]} */
+    conflicts,         // all collected conflicts (transaction-data-conflict + currency-conflict)
+    categoryResult,    // attached for callers that want category-step details
+    settingsResult,    // attached for callers that want settings-step details
   };
 }
 
@@ -1095,10 +1222,20 @@ export async function retryMigration(userId) {
     };
   }
 
+  // Task 17.8: explicitly transition partial ? in-progress in the marker
+  // so the status is updated BEFORE any uploads begin. If startMigration
+  // fails immediately, the marker correctly shows it was attempted (not stuck
+  // at "partial" with no indication a retry was in progress).
+  const markerBeforeRetry = readMigrationMarker(userId);
+  if (markerBeforeRetry) {
+    markerBeforeRetry.status = MIGRATION_STATUS.IN_PROGRESS;
+    writeMigrationMarker(userId, markerBeforeRetry);
+  }
+
   // Delegate to startMigration. The marker already contains the
   // migratedTransactionIds from the previous run; startMigration will
-  // append only newly-migrated IDs. Duplicate detection in addTransaction
-  // ensures already-inserted records are counted as alreadyExistsCount, not re-inserted.
+  // skip already-recorded IDs via the marker check (Task 17.8) rather
+  // than relying solely on cloud duplicate detection.
   return startMigration(userId);
 }
 
@@ -1233,10 +1370,16 @@ export async function migrateCategoriesStep(userId) {
       // Successfully inserted.
       migratedCategoriesThisRun.push({ name: category.name, type: category.type });
       migratedCount++;
+      // Task 17.8: persist progress immediately after each successful category INSERT
+      marker.migratedCategories.push({ name: category.name, type: category.type });
+      writeMigrationMarker(userId, marker);
     } else if (result.error && result.error.code === 'duplicate') {
       // Already exists in cloud — idempotent success; still record it.
       migratedCategoriesThisRun.push({ name: category.name, type: category.type });
       alreadyExistsCount++;
+      // Task 17.8: persist duplicate-counted categories too (they ARE in cloud)
+      marker.migratedCategories.push({ name: category.name, type: category.type });
+      writeMigrationMarker(userId, marker);
     } else if (result.error && result.error.code === 'network-error') {
       // Network error — record failure, stop batch.
       failed.push({ name: category.name, type: category.type, error: result.error });
@@ -1252,15 +1395,9 @@ export async function migrateCategoriesStep(userId) {
       failedCount++;
     }
   }
-
-  // ---- Update marker with this run's results ----
-  // Accumulate — never overwrite existing entries.
-  marker.migratedCategories = [
-    ...marker.migratedCategories,
-    ...migratedCategoriesThisRun,
-  ];
-
-  writeMigrationMarker(userId, marker);
+  // marker.migratedCategories is already up-to-date: each successful INSERT
+  // (including duplicates) persisted the marker immediately inside the loop
+  // (Task 17.8 Fix D). No bulk accumulation needed here.
 
   const finalStatus = (networkStopped || failedCount > 0)
     ? MIGRATION_STATUS.PARTIAL
@@ -1280,19 +1417,467 @@ export async function migrateCategoriesStep(userId) {
 }
 
 /**
- * Verify that all migrated records are present in the cloud.
+ * Verify that all migrated records are present in the cloud and match local data.
  *
- * NOT IMPLEMENTED in Task 17.1.
+ * Algorithm (Req 23.9):
+ *   1. Validate userId.
+ *   2. Read the migration marker; extract migratedTransactionIds and migratedCategories.
+ *   3. Fetch cloud transactions, categories, and settings — all wrapped in try/catch.
+ *   4. Check every marker transaction ID is present in cloud.
+ *   5. Spot-check up to 5 transactions: compare key field values against LocalStorage records.
+ *   6. Check every marker category is present in cloud.
+ *   7. Check settings currency matches the expected value from local data.
+ *   8. If ALL checks pass → set marker status to COMPLETED, set completedAt.
  *
- * @param {string} _userId
- * @returns {Promise<{ ok: false, error: { code: string, message: string } }>}
+ * Safety invariants:
+ *   - Never writes to STORAGE_KEY (financeTrackerData).
+ *   - Never uses email as userId.
+ *   - All network calls wrapped in try/catch; errors returned as structured objects, never thrown.
+ *
+ * @param {string} userId  Authenticated Supabase user UUID.
+ * @returns {Promise<{
+ *   verified: boolean,
+ *   transactionsMissing: string[],
+ *   categoriesMissing: { name: string, type: string }[],
+ *   settingsMatch: boolean,
+ *   spotCheckPassed: boolean,
+ *   details: {
+ *     cloudTransactionCount: number,
+ *     markerTransactionCount: number,
+ *     cloudCategoryCount: number,
+ *     markerCategoryCount: number,
+ *     spotChecked: number,
+ *   },
+ *   error?: { code: string, message: string },
+ * }>}
  */
-export async function verifyMigration(_userId) {
+export async function verifyMigration(userId) {
+  // ---- Helper: empty result shape ----
+  const emptyResult = (verified = false) => ({
+    verified,
+    transactionsMissing:  [],
+    categoriesMissing:    [],
+    settingsMatch:        false,
+    spotCheckPassed:      false,
+    details: {
+      cloudTransactionCount:  0,
+      markerTransactionCount: 0,
+      cloudCategoryCount:     0,
+      markerCategoryCount:    0,
+      spotChecked:            0,
+    },
+  });
+
+  // ---- Precondition: valid userId ----
+  if (!userId || typeof userId !== 'string') {
+    return {
+      ...emptyResult(false),
+      error: {
+        code:    'INVALID_USER_ID',
+        message: 'userId must be a non-empty string (Supabase UUID). Verification aborted.',
+      },
+    };
+  }
+
+  // ---- Step 2: Read migration marker ----
+  const marker = readMigrationMarker(userId);
+  const markerTransactionIds = (marker && Array.isArray(marker.migratedTransactionIds))
+    ? marker.migratedTransactionIds
+    : [];
+  const markerCategories = (marker && Array.isArray(marker.migratedCategories))
+    ? marker.migratedCategories
+    : [];
+
+  // ---- Step 3: Fetch cloud data — all in one try/catch block ----
+  let cloudTransactions  = [];
+  let cloudCategories    = [];
+  let cloudSettings      = null;
+
+  try {
+    const provider = new SupabaseDatabaseProvider();
+    const [fetchedTx, fetchedCat, fetchedSettings] = await Promise.all([
+      provider.getTransactions(userId),
+      provider.getCustomCategories(userId),
+      provider.getSettings(userId),
+    ]);
+    cloudTransactions = Array.isArray(fetchedTx)  ? fetchedTx  : [];
+    cloudCategories   = Array.isArray(fetchedCat) ? fetchedCat : [];
+    cloudSettings     = fetchedSettings ?? null;
+  } catch {
+    return {
+      ...emptyResult(false),
+      error: {
+        code:    'network-error',
+        message: 'Failed to fetch cloud data during verification. Please check your connection.',
+      },
+    };
+  }
+
+  // ---- Step 4: Transaction ID presence check ----
+  const cloudTxById = new Map();
+  for (const tx of cloudTransactions) {
+    if (tx && typeof tx.id === 'string') {
+      cloudTxById.set(tx.id, tx);
+    }
+  }
+
+  const transactionsMissing = markerTransactionIds.filter((id) => !cloudTxById.has(id));
+
+  // ---- Step 5: Spot-check up to 5 transactions (field value comparison) ----
+  // Build a local-transaction map for O(1) lookup during spot-check.
+  // We read raw local data once and index by ID.
+  const rawLocal = _readRawLocalData();
+  const localTxById = new Map();
+  if (rawLocal && Array.isArray(rawLocal.transactions)) {
+    for (const tx of rawLocal.transactions) {
+      if (tx && typeof tx.id === 'string') {
+        localTxById.set(tx.id, tx);
+      }
+    }
+  }
+
+  // Pick the first min(5, markerCount) IDs that are present in both local
+  // storage and cloud (missing ones are already flagged above; we only
+  // spot-check records that ARE present so the check is meaningful).
+  const spotCheckCandidates = markerTransactionIds
+    .filter((id) => cloudTxById.has(id) && localTxById.has(id))
+    .slice(0, 5);
+
+  let spotCheckPassed = true;
+  for (const id of spotCheckCandidates) {
+    const localTx = localTxById.get(id);
+    const cloudTx = cloudTxById.get(id);
+    if (!_transactionsAreIdentical(localTx, cloudTx)) {
+      spotCheckPassed = false;
+      break;
+    }
+  }
+
+  // If there are no candidates to spot-check (e.g. nothing migrated yet or all
+  // records are missing), the spot-check is considered inconclusive — treat as
+  // passed so it doesn't block an otherwise empty verification.
+  // However, if records were expected but all are missing, the ID check already
+  // sets transactionsMissing, which will drive verified=false.
+
+  // ---- Step 6: Category presence check ----
+  // Build a Set of cloud category keys for O(1) lookup.
+  const cloudCatKeys = new Set();
+  for (const cat of cloudCategories) {
+    if (cat && typeof cat.name === 'string' && typeof cat.type === 'string') {
+      cloudCatKeys.add(`${cat.name}::${cat.type}`);
+    }
+  }
+
+  const categoriesMissing = markerCategories.filter(
+    (mc) => mc && typeof mc.name === 'string' && typeof mc.type === 'string'
+      ? !cloudCatKeys.has(`${mc.name}::${mc.type}`)
+      : true  // malformed marker entry counts as missing
+  );
+
+  // ---- Step 7: Settings (currency) check ----
+  // Expected currency comes from local data (the source-of-truth before migration).
+  // If there's no local data or the marker says settingsMigrated=false, we cannot
+  // verify settings — treat as matched to avoid blocking an otherwise clean verify.
+  let settingsMatch = false;
+  const localCurrency = rawLocal?.settings?.currency ?? null;
+  const cloudCurrency = cloudSettings?.currency ?? null;
+
+  if (marker && !marker.settingsMigrated) {
+    // Settings were never migrated — skip check (treat as not applicable → match).
+    settingsMatch = true;
+  } else if (localCurrency && cloudCurrency) {
+    settingsMatch = localCurrency === cloudCurrency;
+  } else if (!localCurrency) {
+    // No local currency to compare against — treat as matched.
+    settingsMatch = true;
+  } else {
+    // Local currency exists but cloud returned nothing — mismatch.
+    settingsMatch = false;
+  }
+
+  // ---- Step 8: Overall verdict ----
+  const verified = (
+    transactionsMissing.length === 0 &&
+    categoriesMissing.length   === 0 &&
+    settingsMatch &&
+    spotCheckPassed
+  );
+
+  // ---- Set marker to COMPLETED only when ALL checks pass ----
+  if (verified && marker) {
+    marker.status      = MIGRATION_STATUS.COMPLETED;
+    marker.completedAt = new Date().toISOString();
+    writeMigrationMarker(userId, marker);
+  }
+
   return {
-    ok: false,
-    error: {
-      code:    'NOT_IMPLEMENTED',
-      message: 'verifyMigration is not yet implemented. Task 17.9 will implement verification.',
+    verified,
+    transactionsMissing,
+    categoriesMissing,
+    settingsMatch,
+    spotCheckPassed,
+    details: {
+      cloudTransactionCount:  cloudTransactions.length,
+      markerTransactionCount: markerTransactionIds.length,
+      cloudCategoryCount:     cloudCategories.length,
+      markerCategoryCount:    markerCategories.length,
+      spotChecked:            spotCheckCandidates.length,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Task 17.6 — Settings / currency migration
+// ---------------------------------------------------------------------------
+
+/**
+ * Migrate settings (currency) from LocalStorage to cloud for the authenticated user.
+ *
+ * Algorithm (Req 23.6):
+ *   1. Read local currency from the raw LocalStorage data.
+ *      If no local data exists → return `{ ok: true, skipped: true, reason: 'no-local-data' }`.
+ *   2. Read cloud currency via `SupabaseDatabaseProvider.getSettings(userId)`.
+ *   3. Same currency on both sides →
+ *        call `setSettings(userId, { currency: localCurrency })` to upsert,
+ *        set `marker.settingsMigrated = true`, return `{ ok: true, settingsMigrated: true }`.
+ *   4. Different currencies →
+ *        return a conflict descriptor `{ type: 'currency-conflict', localCurrency, cloudCurrency }`.
+ *        Do NOT write to cloud. Do NOT update marker.settingsMigrated.
+ *
+ * Safety invariants:
+ *   - NEVER performs currency conversion on any transaction amount.
+ *   - NEVER writes to STORAGE_KEY (`financeTrackerData`) directly.
+ *   - All network calls are wrapped in try/catch; errors returned as structured objects.
+ *   - Never uses email as userId.
+ *
+ * @param {string} userId  Authenticated Supabase user UUID.
+ * @returns {Promise<{
+ *   ok: boolean,
+ *   skipped?: boolean,
+ *   reason?: string,
+ *   conflict?: { type: 'currency-conflict', localCurrency: string, cloudCurrency: string },
+ *   settingsMigrated?: boolean,
+ *   error?: { code: string, message: string }
+ * }>}
+ */
+export async function migrateSettingsStep(userId) {
+  // ---- Precondition: valid userId ----
+  if (!userId || typeof userId !== 'string') {
+    return {
+      ok:    false,
+      error: {
+        code:    'INVALID_USER_ID',
+        message: 'userId must be a non-empty string (Supabase UUID). Settings migration aborted.',
+      },
+    };
+  }
+
+  // ---- Step 1: Read local currency ----
+  // Use the raw LocalStorage reader to get exactly what is stored, without side effects.
+  const raw = _readRawLocalData();
+  if (!raw || !isValidSchema(raw)) {
+    // No local data or corrupted schema — nothing to migrate.
+    return { ok: true, skipped: true, reason: 'no-local-data' };
+  }
+
+  const localCurrency = raw?.settings?.currency;
+  if (typeof localCurrency !== 'string' || !SUPPORTED_CURRENCIES[localCurrency]) {
+    // Invalid / unsupported local currency — skip; no conflict to report.
+    return { ok: true, skipped: true, reason: 'invalid-local-currency' };
+  }
+
+  // ---- Step 2: Read cloud currency ----
+  let cloudSettings;
+  try {
+    const provider = new SupabaseDatabaseProvider();
+    cloudSettings  = await provider.getSettings(userId);
+  } catch (err) {
+    return {
+      ok:    false,
+      error: {
+        code:    'network-error',
+        message: 'Failed to read cloud settings. Please check your connection.',
+      },
+    };
+  }
+
+  const cloudCurrency = cloudSettings?.currency ?? 'IDR';
+
+  // ---- Step 3 / 4: Compare and act ----
+  if (localCurrency === cloudCurrency) {
+    // Same currency — upsert silently (Req 23.6, first condition).
+    let upsertResult;
+    try {
+      const provider = new SupabaseDatabaseProvider();
+      upsertResult   = await provider.setSettings(userId, { currency: localCurrency });
+    } catch (err) {
+      return {
+        ok:    false,
+        error: {
+          code:    'network-error',
+          message: 'Failed to upsert cloud settings. Please check your connection.',
+        },
+      };
+    }
+
+    if (!upsertResult.ok) {
+      return { ok: false, error: upsertResult.error };
+    }
+
+    // Mark settings as migrated in the migration marker.
+    const marker = readMigrationMarker(userId);
+    if (marker) {
+      marker.settingsMigrated = true;
+      writeMigrationMarker(userId, marker);
+    }
+
+    return { ok: true, settingsMigrated: true };
+  }
+
+  // Different currencies — return conflict descriptor; do NOT write anything (Req 23.6, second condition).
+  return {
+    ok:       true,
+    conflict: {
+      type:           'currency-conflict',
+      localCurrency,
+      cloudCurrency,
+    },
+  };
+}
+
+/**
+ * Apply the user's chosen currency after a currency conflict is detected.
+ *
+ * Called by the UI layer after the user explicitly selects one of the two
+ * currencies presented during migration (Req 23.6).
+ *
+ * Algorithm:
+ *   1. Validate userId and chosenCurrency.
+ *   2. Upsert cloud settings with `chosenCurrency` via `SupabaseDatabaseProvider.setSettings`.
+ *   3. Update LocalStorage currency via `storage.setCurrency(chosenCurrency, null)`.
+ *   4. Update migration marker: `settingsMigrated = true`, remove any `currency-conflict`
+ *      entries from `marker.conflicts`.
+ *
+ * Safety invariants:
+ *   - NEVER performs currency conversion on any transaction amount.
+ *   - NEVER writes to STORAGE_KEY directly — uses `setCurrency` from storage.js.
+ *   - All network calls wrapped in try/catch; errors returned as structured objects.
+ *   - Never uses email as userId.
+ *
+ * @param {string} userId           Authenticated Supabase user UUID.
+ * @param {string} chosenCurrency   ISO 4217 currency code chosen by the user.
+ * @returns {Promise<{ ok: boolean, error?: { code: string, message: string } }>}
+ */
+export async function resolveCurrencyConflict(userId, chosenCurrency) {
+  // ---- Precondition: valid userId ----
+  if (!userId || typeof userId !== 'string') {
+    return {
+      ok:    false,
+      error: {
+        code:    'INVALID_USER_ID',
+        message: 'userId must be a non-empty string (Supabase UUID). Conflict resolution aborted.',
+      },
+    };
+  }
+
+  // ---- Precondition: valid chosenCurrency ----
+  if (typeof chosenCurrency !== 'string' || !SUPPORTED_CURRENCIES[chosenCurrency]) {
+    return {
+      ok:    false,
+      error: {
+        code:    'INVALID_CURRENCY',
+        message: `"${chosenCurrency}" is not a supported currency code.`,
+      },
+    };
+  }
+
+  // ---- Step 2: Upsert cloud settings ----
+  let upsertResult;
+  try {
+    const provider = new SupabaseDatabaseProvider();
+    upsertResult   = await provider.setSettings(userId, { currency: chosenCurrency });
+  } catch (err) {
+    return {
+      ok:    false,
+      error: {
+        code:    'network-error',
+        message: 'Failed to update cloud settings. Please check your connection.',
+      },
+    };
+  }
+
+  if (!upsertResult.ok) {
+    return { ok: false, error: upsertResult.error };
+  }
+
+  // ---- Step 3: Update LocalStorage currency (via storage.js — never direct write) ----
+  // Pass null as userId so setCurrency writes to the LocalStorage path.
+  const localUpdated = await setCurrency(chosenCurrency, null);
+  if (!localUpdated) {
+    // Not fatal — cloud is already updated. Log a warning and continue.
+    console.warn('migration: resolveCurrencyConflict — could not update LocalStorage currency.');
+  }
+
+  // ---- Step 4: Update migration marker ----
+  const marker = readMigrationMarker(userId);
+  if (marker) {
+    marker.settingsMigrated = true;
+    // Remove any existing currency-conflict entries from the conflicts array.
+    if (Array.isArray(marker.conflicts)) {
+      marker.conflicts = marker.conflicts.filter((c) => c.type !== 'currency-conflict');
+    }
+    writeMigrationMarker(userId, marker);
+  }
+
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// LocalStorage preservation helpers (Req 23.10, 23.11)
+// ---------------------------------------------------------------------------
+
+/**
+ * Remove only the LocalStorage finance data (`STORAGE_KEY`) for the current
+ * user session, while intentionally preserving the migration marker.
+ *
+ * This is the ONLY correct way for any UI handler to delete local finance
+ * data after a successful migration. Calling `localStorage.removeItem`
+ * directly from app.js would scatter storage knowledge outside this module.
+ *
+ * Invariants:
+ *   - Only `STORAGE_KEY` (`"financeTrackerData"`) is removed — never the
+ *     migration marker key (`financeTrackerMigration_${userId}`).
+ *   - After this call, `readMigrationMarker(userId)` still returns the
+ *     existing marker (with `status: 'completed'`).
+ *   - On the next login, `detectMigrationOpportunity` reads the marker,
+ *     sees `status: 'completed'`, and returns `{ needed: false }` — so the
+ *     migration modal is never shown again.
+ *   - `userId` must be the Supabase UUID — never an email address.
+ *
+ * @param {string} userId - Authenticated Supabase user UUID (for verification only).
+ * @returns {{ ok: boolean }} `{ ok: true }` on success, `{ ok: false }` if
+ *   the marker could not be confirmed as `completed` after the removal.
+ */
+export function clearLocalFinanceData(userId) {
+  if (!userId || typeof userId !== 'string') {
+    console.warn('migration: clearLocalFinanceData called without a valid userId.');
+    return { ok: false };
+  }
+
+  // Remove finance data only — the migration marker key is different and
+  // must NOT be touched here.
+  localStorage.removeItem(STORAGE_KEY);
+
+  // Verify the marker still exists with status: completed so the caller can
+  // confirm the preservation invariant holds.
+  const marker = readMigrationMarker(userId);
+  if (!marker || marker.status !== MIGRATION_STATUS.COMPLETED) {
+    console.warn(
+      'migration: clearLocalFinanceData — marker is missing or not completed after clearing ' +
+      'local data. This may indicate the migration was not fully verified before this call.'
+    );
+    return { ok: false };
+  }
+
+  return { ok: true };
 }

@@ -1337,3 +1337,253 @@ body {
     max-width: 30rem;
   }
 }
+
+/* ==========================================================================
+   Migration modal (Task 17.10) — Req 23.2, 23.3, 23.4, 23.6, 23.7, 23.8, 23.9
+   ========================================================================== */
+
+/*
+ * Full-viewport fixed overlay with a semi-transparent dark backdrop.
+ * z-index: 1000 places it above all app content and auth sections.
+ * The flexbox centering keeps the modal card centered on any screen size.
+ */
+.migration-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background-color: rgba(18, 26, 33, 0.60);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+  overflow-y: auto;
+}
+
+/*
+ * The modal card itself — a surface card matching the app's visual language.
+ * overflow-y: auto allows the card to scroll internally on very small screens
+ * or when the invalid-records list is long.
+ */
+.migration-modal {
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 24px rgba(18, 26, 33, 0.20);
+  padding: var(--space-xl);
+  width: 100%;
+  max-width: 32rem;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/*
+ * Modal heading — same weight as auth card headings for visual consistency.
+ */
+.migration-modal__heading {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-heading);
+  margin: 0 0 var(--space-xs);
+}
+
+/*
+ * Each state container — default hidden; JS switches which one is visible.
+ * Shown state should set `hidden` attribute to false.
+ */
+.migration-state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.migration-state__description {
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  margin: 0;
+}
+
+/*
+ * Sub-heading inside modal states (e.g. "Invalid records" heading).
+ */
+.migration-subheading {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  margin: 0 0 var(--space-xs);
+}
+
+/*
+ * Count display (local vs. cloud transaction counts in the available state).
+ * Uses a compact definition-list pair layout.
+ */
+.migration-counts {
+  display: flex;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+  margin: 0;
+  padding: var(--space-sm);
+  background-color: var(--color-bg);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.migration-counts__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.migration-counts__item dt {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.migration-counts__item dd {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  margin: 0;
+}
+
+/*
+ * .migration-actions — flex row of buttons; wraps on very narrow screens.
+ * Mirrors the form-actions pattern but as a row rather than column.
+ */
+.migration-actions {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/*
+ * Primary action button inside the modal inherits the default button style.
+ * Secondary/ghost buttons use the existing .btn-secondary class.
+ * No override needed unless we want modal-specific width rules.
+ */
+
+/*
+ * .migration-currency-select — full-width select for the conflict state.
+ */
+.migration-currency-select {
+  width: 100%;
+  min-height: var(--control-min-height);
+  padding: var(--space-xs) var(--space-sm);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  font-size: var(--font-size-base);
+  box-sizing: border-box;
+}
+
+/*
+ * .migration-invalid-list — scrollable list of invalid transaction records.
+ * Uses a modest max-height so it does not push the modal off-screen when
+ * many records are invalid.
+ */
+.migration-invalid-list {
+  list-style: none;
+  padding: var(--space-xs);
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-bg);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.migration-invalid-list li {
+  padding: var(--space-2xs) var(--space-xs);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.migration-invalid-list li:last-child {
+  border-bottom: none;
+}
+
+/*
+ * Success message — green to match the income semantic colour (Req 15.1
+ * colour-not-sole-indicator: also uses a checkmark prefix in JS).
+ */
+.migration-success-message {
+  color: var(--color-success);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-base);
+  margin: 0;
+}
+
+/*
+ * Error message — uses the error semantic colour token.
+ */
+.migration-error-message {
+  color: var(--color-error);
+  font-size: var(--font-size-base);
+  margin: 0;
+  line-height: var(--line-height-base);
+}
+
+/*
+ * .migration-spinner — rotating ring indicator for the validating and
+ * in-progress states. Pure CSS: no extra assets required.
+ * Respects prefers-reduced-motion via the global reduced-motion rule above.
+ */
+.migration-spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: migration-spin 0.75s linear infinite;
+  align-self: center;
+}
+
+@keyframes migration-spin {
+  to { transform: rotate(360deg); }
+}
+
+/*
+ * On very narrow screens (< 380px) collapse the modal padding slightly
+ * to keep content usable without horizontal scroll.
+ */
+@media (max-width: 380px) {
+  .migration-modal {
+    padding: var(--space-lg) var(--space-md);
+  }
+}
+
+/*
+ * data-load error paragraph (task 16.7). Hidden by default; shown on network
+ * failure when loading the transaction list.
+ */
+.data-load-error {
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-sm);
+}
+
+/*
+ * List loading indicator — a subtle inline spinner row inside the
+ * transaction list while data is fetching (task 16.7).
+ */
+.list-loading {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  padding: var(--space-xs) var(--space-sm);
+  list-style: none;
+}

@@ -702,6 +702,85 @@
         "chatSessionId": "sess_9a6be9d3-f6ee-423b-9fe6-7a8a88d2af44",
         "timestamp": 1790226325510
       }
+    ],
+    "17.6 Settings and currency migration": [
+      {
+        "executionId": "75895c8b-3199-4c84-bf39-1c6f1d50ed13",
+        "chatSessionId": "sess_d861517f-f0fa-4d42-84da-07b5b4a76d9e",
+        "timestamp": 1790232045675
+      },
+      {
+        "executionId": "75895c8b-3199-4c84-bf39-1c6f1d50ed13",
+        "chatSessionId": "sess_d861517f-f0fa-4d42-84da-07b5b4a76d9e",
+        "timestamp": 1790232517619
+      }
+    ],
+    "17.7 Conflict handling and reporting": [
+      {
+        "executionId": "8e7b6ffa-48fc-44ff-bf39-129d347c77a4",
+        "chatSessionId": "sess_f8aef01f-a056-4e87-a32d-544d34c68bd5",
+        "timestamp": 1790232580297
+      },
+      {
+        "executionId": "8e7b6ffa-48fc-44ff-bf39-129d347c77a4",
+        "chatSessionId": "sess_f8aef01f-a056-4e87-a32d-544d34c68bd5",
+        "timestamp": 1790232725373
+      }
+    ],
+    "17.9 Migration verification": [
+      {
+        "executionId": "a83d3668-aa80-4842-9a53-cb10285ed4ee",
+        "chatSessionId": "sess_8b7b4a4b-fc49-4ae4-a6f5-c1f09b2c2228",
+        "timestamp": 1790235488677
+      },
+      {
+        "executionId": "a83d3668-aa80-4842-9a53-cb10285ed4ee",
+        "chatSessionId": "sess_8b7b4a4b-fc49-4ae4-a6f5-c1f09b2c2228",
+        "timestamp": 1790235492250
+      }
+    ],
+    "17.10 Migration UI": [
+      {
+        "executionId": "2ed7e955-b5f6-44d2-9791-79c36cc4db65",
+        "chatSessionId": "sess_f2ef8ef8-9431-4586-921b-7621d4abae15",
+        "timestamp": 1790237117352
+      },
+      {
+        "executionId": "2ed7e955-b5f6-44d2-9791-79c36cc4db65",
+        "chatSessionId": "sess_f2ef8ef8-9431-4586-921b-7621d4abae15",
+        "timestamp": 1790237142077
+      }
+    ],
+    "17.11 LocalStorage preservation and cleanup": [
+      {
+        "executionId": "2ed7e955-b5f6-44d2-9791-79c36cc4db65",
+        "chatSessionId": "sess_f2ef8ef8-9431-4586-921b-7621d4abae15",
+        "timestamp": 1790237155869
+      },
+      {
+        "executionId": "2ed7e955-b5f6-44d2-9791-79c36cc4db65",
+        "chatSessionId": "sess_f2ef8ef8-9431-4586-921b-7621d4abae15",
+        "timestamp": 1790237473779
+      }
+    ],
+    "17.12 Phase 17 QA": [
+      {
+        "executionId": "2ed7e955-b5f6-44d2-9791-79c36cc4db65",
+        "chatSessionId": "sess_f2ef8ef8-9431-4586-921b-7621d4abae15",
+        "timestamp": 1790237482513
+      },
+      {
+        "executionId": "2ed7e955-b5f6-44d2-9791-79c36cc4db65",
+        "chatSessionId": "sess_f2ef8ef8-9431-4586-921b-7621d4abae15",
+        "timestamp": 1790238088701
+      }
+    ],
+    "17. Local data migration from LocalStorage to Supabase": [
+      {
+        "executionId": "2ed7e955-b5f6-44d2-9791-79c36cc4db65",
+        "chatSessionId": "sess_f2ef8ef8-9431-4586-921b-7621d4abae15",
+        "timestamp": 1790238088911
+      }
     ]
   }
 }

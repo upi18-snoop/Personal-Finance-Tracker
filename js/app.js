@@ -22,6 +22,7 @@ import * as reports from "./reports.js";
 import * as charts from "./charts.js";
 import * as utils from "./utils.js";
 import * as auth from "./auth.js";
+import * as migration from "./migration.js";
 const { getMonthKey } = utils;
 
 /**
@@ -1859,11 +1860,510 @@ async function initializeFinanceApplication() {
   // Initial paint of every current view for the persisted state.
   await renderAll();
 
+  // Wire migration UI buttons once (task 17.10).
+  wireMigrationUI();
+
+  // Check for migration opportunity and show modal if needed (task 17.10, Req 23.2).
+  if (state.currentUser?.id) {
+    await checkAndShowMigrationUI(state.currentUser.id);
+  }
+
   console.info(
     "Personal Finance Tracker: finance application initialized.",
     { selectedMonth: state.selectedMonth }
   );
 }
+
+/* --------------------------------------------------------------------------
+ * Migration UI (task 17.10)
+ *
+ * Orchestrates the migration modal: detects opportunity after login, presents
+ * the available/partial state, walks the user through validation → confirmation
+ * → upload → verification, and handles currency conflicts. All migration logic
+ * is delegated to migration.js exports — this section only handles UI state
+ * transitions and user interaction (Req 23.2–23.9).
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Show the migration modal overlay and move focus inside it.
+ * @returns {void}
+ */
+function showMigrationModal() {
+  const overlay = document.getElementById("migration-modal-overlay");
+  if (!overlay) return;
+  overlay.hidden = false;
+  // Move focus to the modal heading for keyboard/AT users.
+  const heading = document.getElementById("migration-modal-heading");
+  if (heading) {
+    heading.setAttribute("tabindex", "-1");
+    heading.focus();
+  }
+}
+
+/**
+ * Hide the migration modal overlay.
+ * @returns {void}
+ */
+function hideMigrationModal() {
+  const overlay = document.getElementById("migration-modal-overlay");
+  if (overlay) overlay.hidden = true;
+}
+
+/**
+ * Hide all migration state containers, then show the one matching `stateName`.
+ * Valid state names: available | validating | ready | conflict | in-progress |
+ * partial | completed | failed
+ * @param {string} stateName
+ * @returns {void}
+ */
+function showMigrationState(stateName) {
+  const modal = document.querySelector(".migration-modal");
+  if (!modal) return;
+  for (const el of modal.querySelectorAll(".migration-state")) {
+    el.hidden = true;
+  }
+  const target = document.getElementById(`migration-state-${stateName}`);
+  if (target) target.hidden = false;
+}
+
+/**
+ * Update the counts in the available state.
+ * @param {number} localCount
+ * @param {number} cloudCount
+ * @returns {void}
+ */
+function populateMigrationAvailableState(localCount, cloudCount) {
+  const localEl = document.getElementById("migration-local-count");
+  const cloudEl = document.getElementById("migration-cloud-count");
+  utils.safeText(localEl, String(localCount >= 0 ? localCount : "—"));
+  utils.safeText(cloudEl, String(cloudCount >= 0 ? cloudCount : "—"));
+}
+
+/**
+ * Populate the ready state with validation results.
+ * Shows valid/invalid counts and an expandable list of invalid record details.
+ * All text is written via safeText — never innerHTML (Req security).
+ * @param {{
+ *   validTransactions: object[],
+ *   invalidTransactions: { record: object, issues: object[], index: number }[],
+ *   summary: { transactionCount: number, invalidTransactionCount: number },
+ * }} validationResult
+ * @returns {void}
+ */
+function populateMigrationReadyState(validationResult) {
+  const { validTransactions, invalidTransactions, summary } = validationResult;
+  const validCount   = validTransactions.length;
+  const invalidCount = summary ? summary.invalidTransactionCount : (invalidTransactions ? invalidTransactions.length : 0);
+
+  // Update the ready-state description.
+  const descEl = document.getElementById("migration-ready-description");
+  if (descEl) {
+    let msg = `${validCount} transaction${validCount !== 1 ? "s" : ""} ready to import.`;
+    if (invalidCount > 0) {
+      msg += ` ${invalidCount} invalid record${invalidCount !== 1 ? "s" : ""} will be skipped.`;
+    }
+    utils.safeText(descEl, msg);
+  }
+
+  // Update the confirm button label to show the count.
+  const confirmBtn = document.getElementById("migration-confirm-button");
+  if (confirmBtn) {
+    utils.safeText(confirmBtn, `Confirm import (${validCount})`);
+  }
+
+  // Populate and show the invalid details if any exist.
+  const detailsEl = document.getElementById("migration-invalid-details");
+  const listEl    = document.getElementById("migration-invalid-list");
+
+  if (detailsEl && listEl) {
+    if (invalidCount > 0 && invalidTransactions && invalidTransactions.length > 0) {
+      listEl.replaceChildren();
+      for (const { record, issues, index } of invalidTransactions) {
+        const li = document.createElement("li");
+
+        // First line: record index + id snippet.
+        const idSnippet = (record && record.id)
+          ? String(record.id).slice(0, 16)
+          : "unknown";
+        const header = document.createElement("strong");
+        utils.safeText(header, `Record #${index + 1} (id: ${idSnippet}…)`);
+        li.appendChild(header);
+
+        // Issue lines.
+        if (Array.isArray(issues)) {
+          for (const issue of issues) {
+            const p = document.createElement("p");
+            p.style.cssText = "margin:2px 0 0 8px;font-size:0.8125rem;color:var(--color-error)";
+            utils.safeText(p, `${issue.path ?? ""}: ${issue.message ?? ""}`);
+            li.appendChild(p);
+          }
+        }
+        listEl.appendChild(li);
+      }
+      detailsEl.hidden = false;
+    } else {
+      detailsEl.hidden = true;
+    }
+  }
+}
+
+/**
+ * Populate the conflict state's currency <select> with the two options.
+ * @param {string} localCurrency  ISO 4217 code from local data.
+ * @param {string} cloudCurrency  ISO 4217 code from cloud data.
+ * @returns {void}
+ */
+function populateMigrationConflictState(localCurrency, cloudCurrency) {
+  const select = document.getElementById("migration-currency-select");
+  if (!select) return;
+
+  select.replaceChildren();
+
+  const localMeta = utils.SUPPORTED_CURRENCIES[localCurrency];
+  const cloudMeta = utils.SUPPORTED_CURRENCIES[cloudCurrency];
+
+  const localOpt = document.createElement("option");
+  localOpt.value = localCurrency;
+  const localLabel = localMeta ? `${localCurrency} – ${localMeta.label} (local)` : `${localCurrency} (local)`;
+  utils.safeText(localOpt, localLabel);
+
+  const cloudOpt = document.createElement("option");
+  cloudOpt.value = cloudCurrency;
+  const cloudLabel = cloudMeta ? `${cloudCurrency} – ${cloudMeta.label} (cloud)` : `${cloudCurrency} (cloud)`;
+  utils.safeText(cloudOpt, cloudLabel);
+
+  select.appendChild(localOpt);
+  select.appendChild(cloudOpt);
+
+  // Update the description message.
+  const descEl = document.getElementById("migration-conflict-description");
+  if (descEl) {
+    utils.safeText(
+      descEl,
+      `Your local currency (${localCurrency}) differs from your cloud currency (${cloudCurrency}). Choose which one to keep:`
+    );
+  }
+}
+
+/**
+ * Populate the completed state with the migration result.
+ * Only shows the "Clear local data" button when `verified === true`.
+ * @param {number} migratedCount
+ * @param {boolean} verified
+ * @returns {void}
+ */
+function populateMigrationCompletedState(migratedCount, verified) {
+  const msgEl = document.getElementById("migration-completed-message");
+  if (msgEl) {
+    utils.safeText(
+      msgEl,
+      `✓ Import complete! ${migratedCount} transaction${migratedCount !== 1 ? "s" : ""} migrated.`
+    );
+  }
+
+  const clearBtn = document.getElementById("migration-clear-local-button");
+  if (clearBtn) {
+    clearBtn.hidden = !verified;
+  }
+
+  // Reset the "cleared" message if the completed state is shown again.
+  const clearedMsg = document.getElementById("migration-local-cleared-message");
+  if (clearedMsg) clearedMsg.hidden = true;
+}
+
+/**
+ * Populate the failed state with a human-readable error message.
+ * @param {string} errorMessage
+ * @returns {void}
+ */
+function populateMigrationFailedState(errorMessage) {
+  const msgEl = document.getElementById("migration-failed-message");
+  if (msgEl) {
+    utils.safeText(msgEl, errorMessage || "Migration failed. Please try again.");
+  }
+}
+
+/**
+ * Run the upload flow after the user confirms (or resumes/retries).
+ * Handles the in-progress → conflict/partial/completed/failed state transitions.
+ * @param {"start"|"retry"} mode  "start" for first run, "retry" for resume/retry.
+ * @param {string} userId  Authenticated Supabase user UUID.
+ * @returns {Promise<void>}
+ */
+async function runMigrationUpload(mode, userId) {
+  showMigrationState("in-progress");
+
+  let result;
+  try {
+    result = mode === "retry"
+      ? await migration.retryMigration(userId)
+      : await migration.startMigration(userId);
+  } catch (err) {
+    console.error("migration: upload failed unexpectedly", err);
+    populateMigrationFailedState("An unexpected error occurred during import. Please try again.");
+    showMigrationState("failed");
+    return;
+  }
+
+  if (!result.ok) {
+    const errMsg = (result.errors && result.errors.length > 0)
+      ? result.errors.map((e) => e.message).join(" ")
+      : "Import failed. Please try again.";
+    populateMigrationFailedState(errMsg);
+    showMigrationState("failed");
+    return;
+  }
+
+  // Check for currency conflicts in the result.
+  if (Array.isArray(result.conflicts)) {
+    const currencyConflict = result.conflicts.find((c) => c.type === "currency-conflict");
+    if (currencyConflict) {
+      // Store migration counts on the DOM for the apply button to retrieve.
+      const overlay = document.getElementById("migration-modal-overlay");
+      if (overlay) {
+        overlay.dataset.pendingMigratedCount = String(result.migratedCount);
+      }
+      populateMigrationConflictState(currencyConflict.localValue, currencyConflict.cloudValue);
+      showMigrationState("conflict");
+      return;
+    }
+  }
+
+  // Partial result — some records failed.
+  if (
+    result.status === migration.MIGRATION_STATUS.PARTIAL ||
+    result.failedCount > 0
+  ) {
+    showMigrationState("partial");
+    return;
+  }
+
+  // All good — run verification.
+  await finishMigrationWithVerification(userId, result.migratedCount);
+}
+
+/**
+ * Run verifyMigration and transition to the completed or failed state.
+ * @param {string} userId
+ * @param {number} migratedCount  Count to display in the completed message.
+ * @returns {Promise<void>}
+ */
+async function finishMigrationWithVerification(userId, migratedCount) {
+  let verification;
+  try {
+    verification = await migration.verifyMigration(userId);
+  } catch (err) {
+    console.error("migration: verification failed", err);
+    verification = { verified: false };
+  }
+
+  populateMigrationCompletedState(migratedCount, verification.verified === true);
+  showMigrationState("completed");
+}
+
+/**
+ * Detect a migration opportunity and show the modal if needed.
+ * Called after initializeFinanceApplication() completes.
+ * No migration starts without explicit user action (Req 23.2).
+ * @param {string} userId  Authenticated Supabase user UUID.
+ * @returns {Promise<void>}
+ */
+async function checkAndShowMigrationUI(userId) {
+  if (!userId) return;
+
+  let opportunity;
+  try {
+    opportunity = await migration.detectMigrationOpportunity(userId);
+  } catch (err) {
+    console.warn("migration: detectMigrationOpportunity failed", err);
+    return;
+  }
+
+  if (!opportunity.needed) return;
+  if (opportunity.currentStatus === migration.MIGRATION_STATUS.COMPLETED) return;
+
+  showMigrationModal();
+
+  if (opportunity.currentStatus === migration.MIGRATION_STATUS.PARTIAL) {
+    showMigrationState("partial");
+  } else {
+    populateMigrationAvailableState(opportunity.localCount, opportunity.cloudCount);
+    showMigrationState("available");
+  }
+}
+
+/**
+ * Wire all migration modal button event handlers once.
+ * Called from initializeFinanceApplication().
+ * @returns {void}
+ */
+function wireMigrationUI() {
+  // ---- ESC key to dismiss (accessibility) ----
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      const overlay = document.getElementById("migration-modal-overlay");
+      if (overlay && !overlay.hidden) {
+        hideMigrationModal();
+      }
+    }
+  });
+
+  // ---- Import button (available state) ----
+  const importBtn = document.getElementById("migration-import-button");
+  if (importBtn) {
+    importBtn.addEventListener("click", () => {
+      showMigrationState("validating");
+      // Validate on next tick so the spinner renders first.
+      setTimeout(() => {
+        let validationResult;
+        try {
+          validationResult = migration.validateLocalData();
+        } catch (err) {
+          console.error("migration: validateLocalData failed", err);
+          populateMigrationFailedState("Could not validate local data. Please try again.");
+          showMigrationState("failed");
+          return;
+        }
+        populateMigrationReadyState(validationResult);
+        showMigrationState("ready");
+      }, 0);
+    });
+  }
+
+  // ---- Skip button (available state) ----
+  const skipBtn = document.getElementById("migration-skip-button");
+  if (skipBtn) {
+    skipBtn.addEventListener("click", hideMigrationModal);
+  }
+
+  // ---- Confirm button (ready state) ----
+  const confirmBtn = document.getElementById("migration-confirm-button");
+  if (confirmBtn) {
+    confirmBtn.addEventListener("click", () => {
+      const userId = state.currentUser?.id ?? null;
+      if (!userId) { hideMigrationModal(); return; }
+      void runMigrationUpload("start", userId);
+    });
+  }
+
+  // ---- Cancel button (ready state) ----
+  const cancelBtn = document.getElementById("migration-cancel-button");
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", hideMigrationModal);
+  }
+
+  // ---- Conflict Apply button ----
+  const conflictApplyBtn = document.getElementById("migration-conflict-apply-button");
+  if (conflictApplyBtn) {
+    conflictApplyBtn.addEventListener("click", () => {
+      const userId = state.currentUser?.id ?? null;
+      if (!userId) { hideMigrationModal(); return; }
+
+      const select = document.getElementById("migration-currency-select");
+      const chosenCurrency = select ? select.value : null;
+      if (!chosenCurrency) { hideMigrationModal(); return; }
+
+      showMigrationState("in-progress");
+
+      (async () => {
+        const resolveResult = await migration.resolveCurrencyConflict(userId, chosenCurrency);
+        if (!resolveResult.ok) {
+          const errMsg = resolveResult.error ? resolveResult.error.message : "Could not apply currency. Please try again.";
+          populateMigrationFailedState(errMsg);
+          showMigrationState("failed");
+          return;
+        }
+
+        // Update the app's active currency if the user chose a different one.
+        if (utils.SUPPORTED_CURRENCIES[chosenCurrency]) {
+          state.selectedCurrency = chosenCurrency;
+          await renderAll();
+        }
+
+        // Retrieve the migrated count stored before the conflict was detected.
+        const overlay = document.getElementById("migration-modal-overlay");
+        const pendingCount = overlay
+          ? parseInt(overlay.dataset.pendingMigratedCount ?? "0", 10)
+          : 0;
+
+        await finishMigrationWithVerification(userId, pendingCount);
+      })();
+    });
+  }
+
+  // ---- Conflict Cancel button ----
+  const conflictCancelBtn = document.getElementById("migration-conflict-cancel-button");
+  if (conflictCancelBtn) {
+    conflictCancelBtn.addEventListener("click", hideMigrationModal);
+  }
+
+  // ---- Resume button (partial state) ----
+  const resumeBtn = document.getElementById("migration-resume-button");
+  if (resumeBtn) {
+    resumeBtn.addEventListener("click", () => {
+      const userId = state.currentUser?.id ?? null;
+      if (!userId) { hideMigrationModal(); return; }
+      void runMigrationUpload("retry", userId);
+    });
+  }
+
+  // ---- Partial skip button ----
+  const partialSkipBtn = document.getElementById("migration-partial-skip-button");
+  if (partialSkipBtn) {
+    partialSkipBtn.addEventListener("click", hideMigrationModal);
+  }
+
+  // ---- Done button (completed state) ----
+  const doneBtn = document.getElementById("migration-done-button");
+  if (doneBtn) {
+    doneBtn.addEventListener("click", hideMigrationModal);
+  }
+
+  // ---- Clear local data button (completed state, verified only) ----
+  const clearLocalBtn = document.getElementById("migration-clear-local-button");
+  if (clearLocalBtn) {
+    clearLocalBtn.addEventListener("click", () => {
+      const confirmed = window.confirm(
+        "This will permanently delete your local finance data from this browser. " +
+        "Your data is safely stored in the cloud. Continue?"
+      );
+      if (!confirmed) return;
+
+      // Delegate to migration.clearLocalFinanceData so that:
+      //   1. Only STORAGE_KEY is removed — never the migration marker.
+      //   2. The marker (status: 'completed') survives and prevents the
+      //      migration modal from appearing on the next login.
+      const userId = state.currentUser?.id ?? null;
+      if (!userId) return;
+      migration.clearLocalFinanceData(userId);
+
+      clearLocalBtn.hidden = true;
+
+      const clearedMsg = document.getElementById("migration-local-cleared-message");
+      if (clearedMsg) clearedMsg.hidden = false;
+    });
+  }
+
+  // ---- Retry button (failed state) ----
+  const retryBtn = document.getElementById("migration-retry-button");
+  if (retryBtn) {
+    retryBtn.addEventListener("click", () => {
+      const userId = state.currentUser?.id ?? null;
+      if (!userId) { hideMigrationModal(); return; }
+      void runMigrationUpload("retry", userId);
+    });
+  }
+
+  // ---- Failed skip button ----
+  const failedSkipBtn = document.getElementById("migration-failed-skip-button");
+  if (failedSkipBtn) {
+    failedSkipBtn.addEventListener("click", hideMigrationModal);
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Bootstrap
+ * -------------------------------------------------------------------------- */
 
 /**
  * Bootstrap the app on load (task 15.8 - protected bootstrap / auth guard).

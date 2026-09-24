@@ -1852,4 +1852,116 @@ for end-to-end confirmation and is noted in the Remaining Limitations section be
 |---|---|
 | Task 16.12 Cloud Database Phase 16 QA | ✅ **COMPLETE** (static QA; live integration pending credentials) |
 | Phase 16 Cloud Database & User Data Isolation | ✅ **COMPLETE** (Tasks 16.1–16.12 all implemented and statically verified) |
-| Phase 17 (Local Data Migration) | 🔷 Not started — out of scope for this session |
+| Phase 17 (Local Data Migration) | ✅ **COMPLETE** (Tasks 17.1–17.12 all implemented and statically verified) |
+
+---
+
+## Phase 17 — Migration QA (Req 23)
+
+These results are based on static code analysis of `js/migration.js` and `js/app.js`.
+
+### Scenario A — Local data only (cloud empty)
+
+| ID | Test Case | Result | Notes |
+|----|-----------|--------|-------|
+| M-A1 | detectMigrationOpportunity returns needed=true with scenario='A' when local>0 and cloud=0 | ✅ PASS | `migration.js detectMigrationOpportunity()`: after reading local transactions (localCount>0), fetches cloud transactions; when `cloudCount === 0`, returns `{ needed: true, scenario: 'A', currentStatus: 'available' }`. |
+| M-A2 | Migration modal shown in available state after login | ✅ PASS | `app.js checkAndShowMigrationUI()` calls `showMigrationModal()` then `showMigrationState("available")` when `opportunity.needed === true` and `opportunity.currentStatus !== 'completed'`. |
+| M-A3 | Import starts only on explicit button click | ✅ PASS | `app.js wireMigrationUI()` wires `#migration-import-button` click handler; `detectMigrationOpportunity` is called only as a detection step — no upload begins without the user clicking Import. |
+| M-A4 | validateLocalData runs during validating state | ✅ PASS | Import button click handler calls `showMigrationState("validating")` first, then calls `migration.validateLocalData()` inside a `setTimeout(..., 0)` so the spinner renders before validation runs. |
+| M-A5 | Invalid records listed before user confirms | ✅ PASS | `app.js populateMigrationReadyState(validationResult)` receives the full validation result including `invalidTransactions` and `invalidCategories`; these are rendered in the modal ready state before the Confirm button is shown. |
+| M-A6 | startMigration called only after Confirm button click | ✅ PASS | `app.js wireMigrationUI()`: `#migration-confirm-button` click calls `runMigrationUpload("start", userId)` which calls `migration.startMigration(userId)`; the upload never starts without this explicit confirmation. |
+| M-A7 | verifyMigration called after upload completes | ✅ PASS | `app.js runMigrationUpload()` calls `finishMigrationWithVerification(userId, result.migratedCount)`, which calls `migration.verifyMigration(userId)` and transitions to the `"completed"` modal state. |
+| M-A8 | Completed state shows migrated count | ✅ PASS | `app.js populateMigrationCompletedState(migratedCount, verification.verified)` writes the migrated count to the completed modal panel via `safeText`. |
+
+### Scenario B — No local data
+
+| ID | Test Case | Result | Notes |
+|----|-----------|--------|-------|
+| M-B1 | detectMigrationOpportunity returns needed=false when local=0 | ✅ PASS | `migration.js detectMigrationOpportunity()`: reads `_readRawLocalData()`; when `localCount === 0`, immediately returns `{ needed: false, localCount: 0, cloudCount: 0, scenario: 'B', currentStatus: 'not-needed' }` without calling Supabase. |
+| M-B2 | Migration modal is NOT shown | ✅ PASS | `app.js checkAndShowMigrationUI()`: `if (!opportunity.needed) return;` — the function returns before calling `showMigrationModal()`, so no modal is rendered. |
+
+### Scenario C — Both sides with non-overlapping IDs
+
+| ID | Test Case | Result | Notes |
+|----|-----------|--------|-------|
+| M-C1 | detectMigrationOpportunity returns needed=true with scenario='C' | ✅ PASS | `migration.js detectMigrationOpportunity()`: builds `cloudById` Map from cloud IDs, then filters `overlapping = localTransactions.filter(tx => cloudById.has(tx.id))`; when `overlapping.length === 0`, sets `scenario = 'C'`. Returns `{ needed: true, scenario: 'C' }`. |
+| M-C2 | All local transactions inserted (no duplicates) | ✅ PASS | `migration.js startMigration()`: for each valid transaction, first checks `marker.migratedTransactionIds.includes(tx.id)` and the `cloudById` pre-fetch map — when no ID overlaps exist, all records proceed to `provider.addTransaction(userId, tx)` with no skips. |
+
+### Scenario D — Both sides with identical overlapping records
+
+| ID | Test Case | Result | Notes |
+|----|-----------|--------|-------|
+| M-D1 | detectMigrationOpportunity returns needed=true with scenario='D' | ✅ PASS | `migration.js detectMigrationOpportunity()`: when overlapping IDs exist and `_transactionsAreIdentical()` returns true for all of them, `hasConflict = false` → `scenario = 'D'`. Returns `{ needed: true, scenario: 'D' }`. |
+| M-D2 | Overlapping identical records skipped (alreadyExistsCount incremented, 0 inserted) | ✅ PASS | `migration.js startMigration()` conflict pre-check: when `cloudById.has(tx.id)` and `_transactionsAreIdentical(tx, cloudTx)` is true, the record is added to `existingIds`, `alreadyExistsCount++` is incremented, and `continue` skips the INSERT. No `provider.addTransaction` call is made. |
+| M-D3 | verifyMigration returns verified=true | ✅ PASS | `migration.js verifyMigration()`: checks `transactionsMissing.length === 0 && categoriesMissing.length === 0 && settingsMatch && spotCheckPassed`; when all migrated IDs are present in cloud and spot-check passes, sets `marker.status = COMPLETED` and returns `{ verified: true }`. |
+
+### Scenario E — Both sides with conflicting overlapping records
+
+| ID | Test Case | Result | Notes |
+|----|-----------|--------|-------|
+| M-E1 | detectMigrationOpportunity returns needed=true with scenario='E' | ✅ PASS | `migration.js detectMigrationOpportunity()`: when overlapping IDs exist and at least one fails `_transactionsAreIdentical()`, `hasConflict = true` → `scenario = 'E'`. Returns `{ needed: true, scenario: 'E' }`. |
+| M-E2 | Conflicting records reported in conflicts array, not inserted | ✅ PASS | `migration.js startMigration()`: when `cloudById.has(tx.id)` and `!_transactionsAreIdentical(tx, cloudTx)`, pushes a `{ type: 'transaction-data-conflict', localRecord: tx, cloudRecord: cloudTx }` onto `transactionConflicts`, increments `conflictSkipCount`, and `continue` skips the INSERT entirely. Conflicts are appended to `marker.conflicts` and returned. |
+| M-E3 | Non-conflicting records migrated despite conflicts | ✅ PASS | `migration.js startMigration()` upload loop: the conflict `continue` only skips the specific conflicting transaction; the loop continues processing remaining transactions. Non-conflicting records proceed to `provider.addTransaction(userId, tx)` normally. |
+
+### Partial migration and retry
+
+| ID | Test Case | Result | Notes |
+|----|-----------|--------|-------|
+| M-P1 | Network failure sets status=partial, marker preserved | ✅ PASS | `migration.js startMigration()`: on `result.error.code === 'network-error'`, sets `networkStopped = true`, increments `failedCount`, then after the loop: `finalStatus = (failedCount > 0 || networkStopped) ? MIGRATION_STATUS.PARTIAL : MIGRATION_STATUS.IN_PROGRESS`; `writeMigrationMarker(userId, marker)` preserves all progress to LocalStorage. |
+| M-P2 | retryMigration skips already-migrated IDs | ✅ PASS | `migration.js retryMigration()` delegates to `startMigration(userId)` without resetting the marker; inside `startMigration`, the check `marker.migratedTransactionIds.includes(tx.id)` skips every ID that was already successfully uploaded in the prior run, ensuring 0 re-insertions. |
+| M-P3 | retryMigration rejects call when status≠partial | ✅ PASS | `migration.js retryMigration()`: `const currentStatus = getMigrationStatus(userId); if (currentStatus !== MIGRATION_STATUS.PARTIAL)` returns `{ ok: false, errors: [{ code: 'INVALID_STATUS_FOR_RETRY', … }], status: currentStatus }` immediately without calling `startMigration`. |
+
+### Data safety
+
+| ID | Test Case | Result | Notes |
+|----|-----------|--------|-------|
+| M-S1 | Default categories never inserted into cloud | ✅ PASS | `migration.js validateCustomCategories()` calls `processType(type, defaultSet)` which does `if (defaultSet.has(name)) continue;` — all names in `DEFAULT_EXPENSE_SET` and `DEFAULT_INCOME_SET` are skipped before building `validCategories`. Only the filtered `validCategories` list is passed to `migrateCategoriesStep()`. |
+| M-S2 | Currency conflict prompts user; no auto-resolution | ✅ PASS | `migration.js migrateSettingsStep()`: when `localCurrency !== cloudCurrency`, returns `{ ok: true, conflict: { type: 'currency-conflict', localCurrency, cloudCurrency } }` without calling `provider.setSettings`. `startMigration()` surfaces this as a `MigrationConflict`; `app.js` shows the conflict UI panel and waits for `#migration-conflict-apply-button` click. |
+| M-S3 | LocalStorage not deleted until user explicitly clicks Clear | ✅ PASS | `migration.js clearLocalFinanceData()` is only called from `app.js wireMigrationUI()` inside the `#migration-clear-local-button` click handler; the handler also calls `window.confirm()` first. No other code path removes `STORAGE_KEY`. |
+| M-S4 | Migration marker preserved after Clear local data | ✅ PASS | `migration.js clearLocalFinanceData()`: calls `localStorage.removeItem(STORAGE_KEY)` to remove only the finance data key; the migration marker key (`financeTrackerMigration_${userId}`) is a different key and is never touched. Post-removal, `readMigrationMarker(userId)` is called to verify the marker still has `status: 'completed'`. |
+| M-S5 | Re-login after Clear does not prompt migration again | ✅ PASS | `migration.js detectMigrationOpportunity()`: at the top, reads the marker; when `marker.status === MIGRATION_STATUS.COMPLETED`, returns `{ needed: false, scenario: 'none', currentStatus: 'completed' }` before reading any local data. `app.js checkAndShowMigrationUI()` returns immediately on `!opportunity.needed`. |
+| M-S6 | Migration marker key uses user.id UUID, never email | ✅ PASS | `migration.js migrationMarkerKey(userId)` returns `` `${MIGRATION_MARKER_PREFIX}${userId}` `` where `MIGRATION_MARKER_PREFIX = 'financeTrackerMigration_'`; the function receives the UUID from `app.js state.currentUser?.id` — the immutable Supabase UUID from `auth.js _normalizeUser()`. The email address is never used. |
+| M-S7 | No transaction amount is mutated during migration | ✅ PASS | `migration.js startMigration()` passes each transaction as-is to `provider.addTransaction(userId, tx)` — `tx` is the original object from `validation.validTransactions`, which is the original from LocalStorage. `_transactionsAreIdentical()` only reads `.amount`; it never assigns to it. `migrateSettingsStep()` and `resolveCurrencyConflict()` operate only on `settings.currency`, never on any `tx.amount`. |
+
+---
+
+### Phase 17 Summary
+
+| Group | Total | ✅ PASS | ⚠️ PARTIAL | ❌ FAIL |
+|-------|-------|---------|-----------|--------|
+| Scenario A — Local only | 8 | 8 | 0 | 0 |
+| Scenario B — No local data | 2 | 2 | 0 | 0 |
+| Scenario C — Non-overlapping merge | 2 | 2 | 0 | 0 |
+| Scenario D — Identical overlapping | 3 | 3 | 0 | 0 |
+| Scenario E — Conflicting overlapping | 3 | 3 | 0 | 0 |
+| Partial migration & retry | 3 | 3 | 0 | 0 |
+| Data safety | 7 | 7 | 0 | 0 |
+| **Total** | **28** | **28** | **0** | **0** |
+
+All 28 Phase 17 test cases pass by static code analysis. No live Supabase environment was available; execution testing against a real Supabase project is still pending.
+
+---
+
+### Phase 17 Final Status
+
+| Item | Status |
+|---|---|
+| Task 17.12 Migration QA | ✅ **COMPLETE** (static QA; live integration pending credentials) |
+| Phase 17 Local Data Migration | ✅ **COMPLETE** (Tasks 17.1–17.12 all implemented and statically verified) |
+
+---
+
+## Phase 17 — Local Data Migration
+
+If you signed in with Supabase and have existing transaction data stored locally
+in your browser (from before sign-in), the app will offer to import that data to
+your cloud account after your first login.
+
+- Migration is **always optional** — you can skip it at any time
+- **Invalid records** (if any) are shown before you confirm, so you know what will
+  and will not be imported
+- **Currency conflicts** (if local and cloud use different currencies) require you to
+  choose which currency to keep — no conversion is performed
+- Your local data is **never deleted automatically** — only if you explicitly click
+  "Clear local data" after a successful import
+- Once migration is complete, the import prompt will not appear again on future logins

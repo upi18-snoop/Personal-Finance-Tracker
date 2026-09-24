@@ -352,6 +352,109 @@
     </section>
   </main>
 
+  <!-- Migration modal (Task 17.10) — shown by JS after login when local data is available -->
+  <div class="migration-modal-overlay" id="migration-modal-overlay" hidden
+       role="dialog" aria-modal="true" aria-labelledby="migration-modal-heading">
+    <div class="migration-modal">
+      <h2 class="migration-modal__heading" id="migration-modal-heading">Import Local Data</h2>
+
+      <!-- state: available — local data detected, offer import -->
+      <div class="migration-state" id="migration-state-available" hidden>
+        <p class="migration-state__description" id="migration-available-description">
+          You have transaction data stored locally in this browser.
+          Import it to your cloud account so it&rsquo;s available everywhere.
+        </p>
+        <dl class="migration-counts" id="migration-available-counts">
+          <div class="migration-counts__item">
+            <dt>Local transactions</dt>
+            <dd id="migration-local-count">0</dd>
+          </div>
+          <div class="migration-counts__item">
+            <dt>Cloud transactions</dt>
+            <dd id="migration-cloud-count">0</dd>
+          </div>
+        </dl>
+        <div class="migration-actions">
+          <button type="button" id="migration-import-button">Import</button>
+          <button type="button" id="migration-skip-button" class="btn-secondary">Skip</button>
+        </div>
+      </div>
+
+      <!-- state: validating — spinner while local data is checked -->
+      <div class="migration-state" id="migration-state-validating" hidden>
+        <div class="migration-spinner" aria-hidden="true"></div>
+        <p class="migration-state__description">Validating your local data&hellip;</p>
+      </div>
+
+      <!-- state: ready — validation complete, show results before confirming -->
+      <div class="migration-state" id="migration-state-ready" hidden>
+        <p class="migration-state__description" id="migration-ready-description"></p>
+        <div id="migration-invalid-details" hidden>
+          <h3 class="migration-subheading">Invalid records (will not be imported):</h3>
+          <ul class="migration-invalid-list" id="migration-invalid-list"></ul>
+        </div>
+        <div class="migration-actions">
+          <button type="button" id="migration-confirm-button">Confirm import</button>
+          <button type="button" id="migration-cancel-button" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+
+      <!-- state: conflict — currency mismatch between local and cloud -->
+      <div class="migration-state" id="migration-state-conflict" hidden>
+        <p class="migration-state__description" id="migration-conflict-description">
+          Your local currency differs from your cloud currency. Choose which one to keep:
+        </p>
+        <div class="form-field">
+          <label for="migration-currency-select">Currency to use</label>
+          <select id="migration-currency-select" class="migration-currency-select"></select>
+        </div>
+        <div class="migration-actions">
+          <button type="button" id="migration-conflict-apply-button">Apply</button>
+          <button type="button" id="migration-conflict-cancel-button" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+
+      <!-- state: in-progress — upload in flight -->
+      <div class="migration-state" id="migration-state-in-progress" hidden>
+        <div class="migration-spinner" aria-hidden="true"></div>
+        <p class="migration-state__description">Importing your data&hellip;</p>
+      </div>
+
+      <!-- state: partial — migration was interrupted, offer resume -->
+      <div class="migration-state" id="migration-state-partial" hidden>
+        <p class="migration-state__description">
+          Your previous import was interrupted. You can resume where it left off.
+        </p>
+        <div class="migration-actions">
+          <button type="button" id="migration-resume-button">Resume</button>
+          <button type="button" id="migration-partial-skip-button" class="btn-secondary">Skip</button>
+        </div>
+      </div>
+
+      <!-- state: completed — import finished successfully -->
+      <div class="migration-state" id="migration-state-completed" hidden>
+        <p class="migration-success-message" id="migration-completed-message"></p>
+        <p id="migration-local-cleared-message" hidden class="migration-state__description">Local data cleared.</p>
+        <div class="migration-actions">
+          <button type="button" id="migration-clear-local-button" class="btn-secondary" hidden>
+            Clear local data
+          </button>
+          <button type="button" id="migration-done-button">Done</button>
+        </div>
+      </div>
+
+      <!-- state: failed — unrecoverable or partial error -->
+      <div class="migration-state" id="migration-state-failed" hidden>
+        <p class="migration-error-message" id="migration-failed-message"></p>
+        <div class="migration-actions">
+          <button type="button" id="migration-retry-button">Retry</button>
+          <button type="button" id="migration-failed-skip-button" class="btn-secondary">Skip</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Privacy statement (Req 14.3) -->
   <footer class="app-footer" id="app-footer">
     <section class="privacy-section" id="privacy-section" aria-labelledby="privacy-heading">

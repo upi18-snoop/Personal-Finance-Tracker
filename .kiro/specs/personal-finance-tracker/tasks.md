@@ -1,4 +1,4 @@
-# Implementation Plan: Personal Finance Tracker (v1)
+ï»¿# Implementation Plan: Personal Finance Tracker (v1)
 
 ## Overview
 
@@ -1231,9 +1231,9 @@ broken or removed.
 
 ---
 
-### Phase 17 — Local Data Migration
+### Phase 17 ï¿½ Local Data Migration
 
-- [ ] 17. Local data migration from LocalStorage to Supabase
+- [x] 17. Local data migration from LocalStorage to Supabase
   - [x] 17.1 Migration architecture and module scaffolding
     - **Objective:** Create the `js/migration.js` module skeleton with documented interfaces, import the correct dependencies, and define the MigrationStatus type and migration marker schema.
     - **Requirements covered:** 23.1, 23.11
@@ -1259,7 +1259,7 @@ broken or removed.
       - Validate custom categories: name non-blank, type valid, no duplicate (name,type) pairs, not a default category.
       - Validate settings: currency ? SUPPORTED_CURRENCIES.
       - Return `{ valid: boolean, validTransactions: [], invalidTransactions: [], validCategories: [], invalidCategories: [], settings: {}, settingsValid: boolean, errors: [] }`.
-      - Invalid records are collected and returned — never silently dropped.
+      - Invalid records are collected and returned ï¿½ never silently dropped.
     - **Acceptance criteria:**
       - Invalid transactions (bad type, zero amount, invalid date, blank itemName) are identified and returned in `invalidTransactions`.
       - Default category names are correctly excluded from `validCategories`.
@@ -1317,7 +1317,7 @@ broken or removed.
       - Running category migration twice does not produce duplicate errors (handled gracefully).
     - **Dependencies:** 17.2, 17.3
 
-  - [ ] 17.6 Settings and currency migration
+  - [x] 17.6 Settings and currency migration
     - **Objective:** Migrate the settings (currency) from LocalStorage to cloud, detecting and reporting currency conflicts.
     - **Requirements covered:** 23.6, 23.8
     - **Files:** `js/migration.js`
@@ -1325,7 +1325,7 @@ broken or removed.
       - Read local currency (`settings.currency` from LocalStorage).
       - Read cloud currency via `SupabaseDatabaseProvider.getSettings(userId)`.
       - If same ? upsert cloud settings with that currency value.
-      - If different ? return a conflict descriptor `{ type: 'currency-conflict', localCurrency, cloudCurrency }` — do NOT apply either automatically; the UI layer will prompt the user.
+      - If different ? return a conflict descriptor `{ type: 'currency-conflict', localCurrency, cloudCurrency }` ï¿½ do NOT apply either automatically; the UI layer will prompt the user.
       - After user selects currency ? call `SupabaseDatabaseProvider.setSettings(userId, { currency: chosen })` and update LocalStorage via `storage.setCurrency`.
       - Track settings migration in the migration marker.
     - **Acceptance criteria:**
@@ -1334,14 +1334,14 @@ broken or removed.
       - No currency conversion is performed on any transaction amount.
     - **Dependencies:** 17.2, 17.3
 
-  - [ ] 17.7 Conflict handling and reporting
+  - [x] 17.7 Conflict handling and reporting
     - **Objective:** Collect and surface all conflicts (transaction data conflicts, currency conflicts) to the UI layer in a structured format that can be presented to the user.
     - **Requirements covered:** 23.4, 23.6, 23.7
     - **Files:** `js/migration.js`
     - **Implementation details:**
       - Define a `MigrationConflict` shape: `{ type: 'transaction-data-conflict' | 'currency-conflict', localRecord?, cloudRecord?, localValue?, cloudValue? }`.
       - `startMigration` returns `{ ok: boolean, status: MigrationStatus, conflicts: MigrationConflict[], migratedCount: number, skippedCount: number, failedCount: number }`.
-      - No conflict is silently resolved — all conflicts are returned to the caller (app.js / migration UI).
+      - No conflict is silently resolved ï¿½ all conflicts are returned to the caller (app.js / migration UI).
       - Conflicts do NOT block non-conflicting records from being migrated.
     - **Acceptance criteria:**
       - Transaction with same ID but different amount in cloud ? reported as `transaction-data-conflict`, not inserted.
@@ -1349,7 +1349,7 @@ broken or removed.
       - Non-conflicting records are still migrated when conflicts exist.
     - **Dependencies:** 17.4, 17.5, 17.6
 
-  - [ ] 17.8 Partial migration and retry mechanism
+  - [x] 17.8 Partial migration and retry mechanism
     - **Objective:** Ensure migration is resumable: the migration marker tracks progress, retry skips already-completed records, and the app can distinguish a partial migration from a fresh one.
     - **Requirements covered:** 23.8
     - **Files:** `js/migration.js`
@@ -1363,7 +1363,7 @@ broken or removed.
       - Migration marker status is `partial` after interruption, not `completed`.
     - **Dependencies:** 17.4, 17.5, 17.6
 
-  - [ ] 17.9 Migration verification
+  - [x] 17.9 Migration verification
     - **Objective:** Implement `verifyMigration(userId)` which confirms all migrated records are actually present in the cloud by fetching and comparing against the migration manifest.
     - **Requirements covered:** 23.9
     - **Files:** `js/migration.js`
@@ -1380,8 +1380,8 @@ broken or removed.
       - Returns `verified: true` and sets status `completed` only when all checks pass.
     - **Dependencies:** 17.4, 17.5, 17.6, 17.8
 
-  - [ ] 17.10 Migration UI
-    - **Objective:** Implement the migration UI in `index.html` and wire it in `app.js` — a modal or notification that detects migration opportunity after login, presents choices to the user, shows validation errors and conflicts, and allows the user to confirm, skip, or retry migration.
+  - [x] 17.10 Migration UI
+    - **Objective:** Implement the migration UI in `index.html` and wire it in `app.js` ï¿½ a modal or notification that detects migration opportunity after login, presents choices to the user, shows validation errors and conflicts, and allows the user to confirm, skip, or retry migration.
     - **Requirements covered:** 23.2, 23.3, 23.4, 23.6, 23.7, 23.8, 23.9
     - **Files:** `index.html`, `js/app.js`, `css/styles.css`
     - **Implementation details:**
@@ -1405,8 +1405,8 @@ broken or removed.
       - "Clear local data" button is only available after `verified: true`.
     - **Dependencies:** 17.7, 17.9
 
-  - [ ] 17.11 LocalStorage preservation and cleanup
-    - **Objective:** Define and implement the LocalStorage preservation behavior — preserve migration marker and optionally preserve original local data as a backup after successful migration.
+  - [x] 17.11 LocalStorage preservation and cleanup
+    - **Objective:** Define and implement the LocalStorage preservation behavior ï¿½ preserve migration marker and optionally preserve original local data as a backup after successful migration.
     - **Requirements covered:** 23.10, 23.11
     - **Files:** `js/migration.js`, `js/app.js`
     - **Implementation details:**
@@ -1418,10 +1418,10 @@ broken or removed.
     - **Acceptance criteria:**
       - After successful migration and verification, LocalStorage finance data remains unless user explicitly clears it.
       - After user clears local data, re-login does not prompt migration again (marker status = `completed`).
-      - Migration marker key is never based on email — always uses user.id UUID.
+      - Migration marker key is never based on email ï¿½ always uses user.id UUID.
     - **Dependencies:** 17.9, 17.10
 
-  - [ ] 17.12 Phase 17 QA
+  - [x] 17.12 Phase 17 QA
     - **Objective:** Verify that all Phase 17 acceptance criteria are met, all migration scenarios (A-E) behave correctly, migration is idempotent, and no existing Phase 1-16 functionality is broken.
     - **Requirements covered:** 23.1-23.13
     - **Files:** `docs/rls-verification.md` (update), `README.md` (update)
