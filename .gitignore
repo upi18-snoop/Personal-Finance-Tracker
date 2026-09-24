@@ -12,3 +12,10 @@ Desktop.ini
 
 # Logs
 *.log
+
+# Credentials & secrets — never commit these (Req 33.3, Phase 18)
+.env
+.env.local
+.env.production
+*.key
+*.pem

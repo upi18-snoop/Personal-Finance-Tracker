@@ -1111,8 +1111,9 @@ function validateRegisterForm(values) {
 
   if (!values.password || values.password.length === 0) {
     errors.push({ field: "password", message: "Password is required." });
-  } else if (values.password.length < 6) {
-    errors.push({ field: "password", message: "Password must be at least 6 characters." });
+  } else if (values.password.length < 8) {
+    // Phase 18.2 (Req 25.11): raised from 6 to 8 to match auth.js signUp pre-validation.
+    errors.push({ field: "password", message: "Password must be at least 8 characters." });
   }
 
   if (!values.confirmPassword || values.confirmPassword.length === 0) {
@@ -1235,7 +1236,7 @@ function getRegisterErrorMessage(error) {
     case "invalid-email":
       return "Please enter a valid email address.";
     case "weak-password":
-      return "Password must be at least 6 characters.";
+      return "Password must be at least 8 characters.";
     case "rate-limited":
       return "Too many attempts. Please wait a moment and try again.";
     case "network-error":
@@ -1765,9 +1766,13 @@ async function initAuthSession() {
       if (registerSection) registerSection.hidden = true;
       if (resetSection) resetSection.hidden = true;
     } else {
-      state.currentUser = null;
+      // Handles SIGNED_OUT, SESSION_EXPIRED, and TOKEN_REFRESHED→null uniformly
+      // through the single shared teardown helper (Req 26.1–26.4, 32.1–32.6).
+      clearAuthenticatedSessionState();
+      // showSignedOutState() also sets state.currentUser = null — intentional
+      // belt-and-suspenders redundancy with clearAuthenticatedSessionState().
       showSignedOutState();
-      hideProtectedApp();
+      showLoginView();
     }
   });
 
@@ -1783,6 +1788,76 @@ async function initAuthSession() {
     state.currentUser = null;
     return null;
   }
+}
+
+/* --------------------------------------------------------------------------
+ * Session teardown helpers (task 18.3)
+ *
+ * clearFinanceUIDOM() and clearAuthenticatedSessionState() are the single
+ * teardown path shared by explicit logout (onLogout) and every signed-out
+ * auth event (SIGNED_OUT, SESSION_EXPIRED, TOKEN_REFRESHED→null).
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Wipe all Finance_UI DOM content so no previous user's data remains visible
+ * after sign-out or session expiry (Req 32.3, 32.6).
+ *
+ * Called exclusively from clearAuthenticatedSessionState(). Each DOM operation
+ * is guarded by a null check so missing elements are silently skipped.
+ * @returns {void}
+ */
+function clearFinanceUIDOM() {
+  // Transaction list rows.
+  const txList = document.getElementById("transaction-list");
+  if (txList) txList.replaceChildren();
+
+  // Dashboard balance / summary numbers.
+  const totalBalance = document.getElementById("total-balance");
+  const totalIncome = document.getElementById("total-income");
+  const totalExpense = document.getElementById("total-expense");
+  const txCount = document.getElementById("transaction-count");
+  if (totalBalance) utils.safeText(totalBalance, "");
+  if (totalIncome)  utils.safeText(totalIncome, "");
+  if (totalExpense) utils.safeText(totalExpense, "");
+  if (txCount)      utils.safeText(txCount, "");
+
+  // Category management list.
+  const catList = document.getElementById("category-list");
+  if (catList) catList.replaceChildren();
+
+  // Monthly summary section.
+  const monthlySummary = document.getElementById("monthly-summary");
+  if (monthlySummary) monthlySummary.replaceChildren();
+
+  // Destroy Chart.js instances so they can be cleanly recreated on next login.
+  charts.destroyCharts();
+
+  // Clear any data-load error banner.
+  clearDataError();
+}
+
+/**
+ * Single teardown helper used by both explicit logout and every signed-out auth
+ * event (SIGNED_OUT, SESSION_EXPIRED, TOKEN_REFRESHED→null). Centralises the
+ * teardown sequence so there is only one implementation (Req 26.1–26.4, 32.1–32.6).
+ *
+ * Order is intentional:
+ *   1. Clear identity first — all subsequent operations see null user (Req 26.1).
+ *   2. Hide Finance_UI — no authenticated content visible (Req 26.2, 32.2).
+ *   3. Reset init guard — next login triggers full re-initialization (Req 26.3).
+ *   4. Close migration modal — no orphaned overlay after logout (Req 32.2).
+ *   5. Wipe Finance_UI DOM — no prior user's data in any panel (Req 32.6).
+ *
+ * The caller is responsible for step 6: show login/signed-out UI.
+ * @returns {void}
+ */
+function clearAuthenticatedSessionState() {
+  state.currentUser = null;    // 1. clear identity first
+  hideProtectedApp();          // 2. hide #app-main
+  financeAppInitialized = false; // 3. reset init guard
+  hideMigrationModal();        // 4. close migration modal if open
+  clearFinanceUIDOM();         // 5. wipe Finance_UI DOM content
+  // Caller handles step 6: show login / signed-out UI.
 }
 
 /* --------------------------------------------------------------------------

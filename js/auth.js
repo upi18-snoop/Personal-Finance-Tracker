@@ -46,8 +46,9 @@ import { getSupabaseClient } from './supabase.js';
 
 /**
  * Known Supabase Auth error message/code fragments → normalized error codes.
- * We match on the error message string because supabase-js v2 does not expose
- * a stable machine-readable error code enum for all cases.
+ * We match on the raw SDK message string internally only — the raw message
+ * never escapes this module. supabase-js v2 does not expose a stable
+ * machine-readable error code enum for all cases, so string matching is used.
  * @type {Array<{ pattern: RegExp, code: string }>}
  */
 const ERROR_MAP = [
@@ -65,24 +66,57 @@ const ERROR_MAP = [
 ];
 
 /**
+ * Static safe messages keyed by normalized error code (Req 25.9, F-01).
+ * These are the ONLY strings that escape _normalizeError() — never the raw
+ * SDK message. Each message is ≤ 200 characters and contains no credentials,
+ * tokens, or internal server details.
+ * @type {Record<string, string>}
+ */
+const SAFE_MESSAGES = {
+  'invalid-credentials':  'Incorrect email or password.',
+  'email-not-confirmed':  'Please confirm your email address before signing in.',
+  'email-in-use':         'An account with this email address already exists.',
+  'weak-password':        'Password does not meet the minimum requirements.',
+  'invalid-email':        'Please enter a valid email address.',
+  'user-not-found':       'No account found with this email address.',
+  'rate-limited':         'Too many attempts. Please wait a moment and try again.',
+  'network-error':        'A network error occurred. Please check your connection.',
+  'validation-error':     'Please check your input and try again.',
+  'not-configured':       'Authentication is not configured.',
+  'unknown':              'An unexpected error occurred. Please try again.',
+};
+
+/**
  * Map a raw Supabase error (or any Error) to a normalized error object.
- * The raw error is never returned to callers so internal SDK details stay
- * encapsulated. The human-readable `message` is safe to display in UI.
+ *
+ * Security guarantee (Req 25.9, F-01):
+ *   - The raw SDK message is used ONLY for internal pattern matching to derive
+ *     the error code. It NEVER appears in the returned object.
+ *   - The returned `message` is always a static string from SAFE_MESSAGES.
+ *   - `code` is ≤ 50 characters; `message` is ≤ 200 characters.
+ *   - No JWT, stack trace, or credential can escape through either field.
  *
  * @param {unknown} raw  The raw error from the Supabase SDK.
  * @returns {{ code: string, message: string }}
  */
 function _normalizeError(raw) {
-  const msg = (raw && typeof raw === 'object' && 'message' in raw)
+  // Extract the raw SDK message for internal pattern matching ONLY.
+  // This string is never returned to callers.
+  const rawMsg = (raw && typeof raw === 'object' && 'message' in raw)
     ? String(raw.message)
-    : String(raw ?? 'Unknown error');
+    : String(raw ?? '');
 
-  for (const { pattern, code } of ERROR_MAP) {
-    if (pattern.test(msg)) {
-      return { code, message: msg };
+  // Derive the error code by pattern-matching the raw message internally.
+  let code = 'unknown';
+  for (const entry of ERROR_MAP) {
+    if (entry.pattern.test(rawMsg)) {
+      code = entry.code;
+      break;
     }
   }
-  return { code: 'unknown', message: msg };
+
+  // Return ONLY the static safe message — the raw SDK message never escapes.
+  return { code, message: SAFE_MESSAGES[code] ?? SAFE_MESSAGES['unknown'] };
 }
 
 /**
@@ -142,11 +176,16 @@ function _normalizeUser(supabaseUser) {
  * @returns {Promise<{ ok: true, user: { id: string, email: string } } | { ok: false, error: { code: string, message: string } }>}
  */
 export async function signUp(email, password) {
+  // Client-side pre-validation (Req 25.11, F-07) — runs before any network call.
+  // Returns 'validation-error' so the UI can distinguish local vs server errors.
   if (!email || typeof email !== 'string' || email.trim() === '') {
-    return { ok: false, error: { code: 'invalid-email', message: 'Email is required.' } };
+    return { ok: false, error: { code: 'validation-error', message: 'Please enter a valid email address.' } };
   }
-  if (!password || typeof password !== 'string' || password.length === 0) {
-    return { ok: false, error: { code: 'weak-password', message: 'Password is required.' } };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    return { ok: false, error: { code: 'validation-error', message: 'Please enter a valid email address.' } };
+  }
+  if (!password || typeof password !== 'string' || password.length < 8) {
+    return { ok: false, error: { code: 'validation-error', message: 'Password must be at least 8 characters.' } };
   }
 
   const client = await getSupabaseClient();

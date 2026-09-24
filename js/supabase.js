@@ -80,10 +80,14 @@ export async function getSupabaseClient() {
     return _client;
   }
 
-  // Guard: refuse to create a client when config placeholders are still present.
+  // Guard: refuse to create a client when config is missing, empty, whitespace-only,
+  // or still contains the placeholder strings shipped with the repository.
+  // (Req 27.3 — return null without CDN import for any invalid config value.)
   if (
     !SUPABASE_CONFIG.url ||
     !SUPABASE_CONFIG.anonKey ||
+    SUPABASE_CONFIG.url.trim() === '' ||
+    SUPABASE_CONFIG.anonKey.trim() === '' ||
     SUPABASE_CONFIG.url === 'YOUR_SUPABASE_PROJECT_URL' ||
     SUPABASE_CONFIG.anonKey === 'YOUR_SUPABASE_ANON_KEY'
   ) {
@@ -94,9 +98,11 @@ export async function getSupabaseClient() {
     const { createClient } = await import(SUPABASE_CDN_URL);
     _client = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
     return _client;
-  } catch (err) {
+  } catch (_err) {
     // CDN load failure (offline, CSP block, etc.)
-    console.error('supabase.js: failed to load supabase-js from CDN.', err);
+    // SAFE: static message only — does NOT interpolate the error object,
+    // SUPABASE_CONFIG.url, or SUPABASE_CONFIG.anonKey. (Req 27.4)
+    console.error('supabase.js: failed to load supabase-js from CDN. Check your network connection.');
     return null;
   }
 }
