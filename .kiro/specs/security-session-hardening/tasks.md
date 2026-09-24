@@ -21,7 +21,7 @@ real project, two-user isolation test, production deployment, online smoke test,
 
 ## Tasks
 
-- [ ] 18. Phase 18 — Security & Session Hardening
+- [x] 18. Phase 18 — Security & Session Hardening
 
   - [x] 18.1 Security Architecture Audit
     - Read and audit the following files in their entirety: `js/auth.js`, `js/config.js`,
@@ -336,7 +336,7 @@ real project, two-user isolation test, production deployment, online smoke test,
     - Add Phase 18 notes to `README.md` alongside the existing phase notes
     - _Requirements: 34.1, 34.2, 34.3, 34.4, 34.5, 34.6_
 
-- [ ] 18.13. Checkpoint — Manual verification before production configuration
+- [x] 18.13. Checkpoint — Manual verification before production configuration
   - Open `index.html` in a modern browser; verify zero console errors on initial
     load, on sign-in, on sign-out, and on core interactions
   - Verify sign-in, sign-out, transaction add/delete, category add/delete,

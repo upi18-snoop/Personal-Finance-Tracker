@@ -46,7 +46,7 @@ export const SUPABASE_CONFIG = {
    *
    * SAFE TO COMMIT — this is a public identifier, not a secret.
    */
-  url: 'YOUR_SUPABASE_PROJECT_URL',
+  url: 'https://daxblklizvqfhaltnqdx.supabase.co',
 
   /**
    * Your Supabase anon (publishable) key.
@@ -58,5 +58,5 @@ export const SUPABASE_CONFIG = {
    * NEVER use the service_role key here. The service_role key bypasses
    * all RLS policies and must NEVER appear in any client-side file.
    */
-  anonKey: 'YOUR_SUPABASE_ANON_KEY',
+  anonKey: 'sb_publishable_A9J6NfOyPD0xrR3iIgstBw_jlzNiJVB',
 };
