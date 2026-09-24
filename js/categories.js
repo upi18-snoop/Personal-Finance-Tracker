@@ -8,6 +8,79 @@
  * Layer: Business logic. Imports storage.js and utils.js ONLY. Knows nothing
  * about the DOM.
  *
+ * =============================================================================
+ * Task 16.9 — Category CRUD Verification (PASSED)
+ * =============================================================================
+ *
+ * AC1: Add custom category → row in Supabase `categories` table under correct
+ *      `user_id`.
+ *   STATUS: PASS
+ *   TRACE:  addCategory(name, type, userId)
+ *             → validateCategory() [guards blanks and duplicates]
+ *             → storage.addCustomCategory(userId, { name: trimmed, type })
+ *               [storage.js line: if (userId) → new SupabaseDatabaseProvider()]
+ *             → SupabaseDatabaseProvider.addCustomCategory(userId, category)
+ *               [supabase-storage.js: inserts { user_id: userId, name, type }
+ *                into the `categories` table]
+ *   The userId is threaded end-to-end; every insert carries the caller's
+ *   Supabase UUID as `user_id`, satisfying per-user ownership (Req 20).
+ *
+ * AC2: Default categories remain JS constants — NO rows inserted into Supabase.
+ *   STATUS: PASS
+ *   TRACE:  DEFAULT_EXPENSE_CATEGORIES / DEFAULT_INCOME_CATEGORIES are pure
+ *           const arrays in this file (and mirrored in storage.js).
+ *           initializeData(userId) → SupabaseDatabaseProvider.initializeUserData
+ *             only upserts one row into `settings` (ON CONFLICT DO NOTHING);
+ *             it never touches the `categories` table.
+ *           _loadFromSupabase() calls getCustomCategories(userId) and then
+ *             spreads the JS defaults in front of the returned custom rows in
+ *             memory: [...DEFAULT_INCOME_CATEGORIES, ...customIncome].
+ *             No default names are ever written to the DB.
+ *   Confirmed by schema.sql comment: "Default categories are NOT stored in the
+ *   database. They remain JavaScript constants in js/categories.js."
+ *
+ * AC3: Duplicate category rejected by UNIQUE constraint + application guard.
+ *   STATUS: PASS
+ *   TRACE (application layer):
+ *           validateCategory(name, type, userId)
+ *             → getCategories(type, userId) → storage.loadData(userId)
+ *               [for Supabase: assembles merged array from DB + JS defaults]
+ *             → existing.includes(trimmed) → returns { ok: false, error: 'duplicate' }
+ *             → addCategory returns { ok: false, error: 'duplicate' } before
+ *               any storage write is attempted.
+ *   TRACE (database layer):
+ *           schema.sql: CONSTRAINT categories_user_name_type_unique
+ *             UNIQUE (user_id, name, type) — rejects any duplicate that
+ *             bypasses the application guard.
+ *           supabase-storage.js _normalizeError: Postgres error code '23505'
+ *             (UNIQUE violation) → { code: 'duplicate', message: '...' }
+ *             propagated up as { ok: false, error: { code: 'duplicate' } }.
+ *   Both guards are independent and complementary; neither alone is sufficient
+ *   for full defence-in-depth.
+ *
+ * AC4: In-use category cannot be deleted (guard checks cloud transactions).
+ *   STATUS: PASS
+ *   TRACE:  deleteCategory(name, type, userId)
+ *             → isCategoryInUse(name, type, userId)
+ *               → storage.getTransactions(userId)
+ *                 [storage.js: if (userId) → SupabaseDatabaseProvider
+ *                  .getTransactions(userId) — fetches from Supabase `transactions`
+ *                  table scoped by user_id]
+ *               → list.some(tx => tx.type === type && tx.category === trimmed)
+ *             → if in-use: returns { ok: false, error: 'in-use' }
+ *               (no storage write, transactions untouched — Req 8.8)
+ *   The in-use check reads live cloud data, not a stale local cache, so the
+ *   guard is always accurate even across sessions.
+ *
+ * No gaps found. No code changes required. All four acceptance criteria are
+ * satisfied by the implementation already in place across:
+ *   - js/categories.js   (this file — business logic guards)
+ *   - js/storage.js      (async CRUD facade, provider routing)
+ *   - js/supabase-storage.js  (SupabaseDatabaseProvider CRUD methods)
+ *   - supabase/schema.sql     (UNIQUE constraint on categories table)
+ *   - supabase/rls.sql        (RLS policy: authenticated users own their rows)
+ * =============================================================================
+ *
  * Async update (task 16.6):
  *   All storage-touching functions are now async and accept an optional userId
  *   parameter (default null). A null userId routes to the LocalStorage path in

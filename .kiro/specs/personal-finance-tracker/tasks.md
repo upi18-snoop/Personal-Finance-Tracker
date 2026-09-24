@@ -1170,7 +1170,7 @@ broken or removed.
       - Network errors surface a user-readable message; the app does not crash.
     - **Dependencies:** 16.6
 
-  - [ ] 16.8 Transaction CRUD Verification
+  - [x] 16.8 Transaction CRUD Verification
     - **Objective:** Verify that transactions can be created, read, and deleted from Supabase for an authenticated user, and that dashboard totals are computed from cloud data.
     - **Requirements covered:** 1–3, 20
     - **Files:** None (verification only)
@@ -1181,7 +1181,7 @@ broken or removed.
       - A second authenticated user sees an empty dashboard (no cross-user data).
     - **Dependencies:** 16.7
 
-  - [ ] 16.9 Category CRUD Verification
+  - [-] 16.9 Category CRUD Verification
     - **Objective:** Verify that custom categories are stored per-user in Supabase and that all category rules (duplicate prevention, in-use guard) work against cloud data.
     - **Requirements covered:** 8, 20
     - **Files:** None (verification only)

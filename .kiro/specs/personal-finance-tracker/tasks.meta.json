@@ -621,6 +621,25 @@
         "chatSessionId": "sess_5f79f5af-925e-4b32-9c5f-7b4de1c44457",
         "timestamp": 1790217512274
       }
+    ],
+    "16.8 Transaction CRUD Verification": [
+      {
+        "executionId": "8a986561-8b6e-4cac-bd0a-89ef3155dc01",
+        "chatSessionId": "sess_a03c129f-effe-4a85-96b2-f50f06b9c64d",
+        "timestamp": 1790219277665
+      },
+      {
+        "executionId": "8a986561-8b6e-4cac-bd0a-89ef3155dc01",
+        "chatSessionId": "sess_a03c129f-effe-4a85-96b2-f50f06b9c64d",
+        "timestamp": 1790219369682
+      }
+    ],
+    "16.9 Category CRUD Verification": [
+      {
+        "executionId": "86618beb-330d-410e-af32-868ecb1af144",
+        "chatSessionId": "sess_a9515114-e745-4301-b8a0-af80c1dcd257",
+        "timestamp": 1790219438402
+      }
     ]
   }
 }
