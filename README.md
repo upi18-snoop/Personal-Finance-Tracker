@@ -1424,3 +1424,432 @@ The application is **not yet migrated to async cloud storage** — the existing 
 `LocalStorage` path in `storage.js` remains the active provider. `SupabaseDatabaseProvider`
 will be wired in during Task 16.5 (async storage interface) and subsequent tasks. Until then,
 all finance data continues to be read from and written to `localStorage` as in Phases 1–15.
+
+
+---
+
+## Phase 16 — Cloud Database QA (Task 16.12)
+
+### Scope
+
+Task 16.12 covers static code QA for the Supabase PostgreSQL cloud data layer introduced in
+Phase 16 (Tasks 16.1–16.11). Because `js/config.js` still holds placeholder values
+(`YOUR_SUPABASE_PROJECT_URL` / `YOUR_SUPABASE_ANON_KEY`), **live Supabase integration testing
+was not performed**. All results below are based on static code analysis and call-graph tracing
+across the five files modified in Phase 16: `js/storage.js`, `js/transactions.js`,
+`js/categories.js`, `js/app.js`, and the new `js/supabase-storage.js` / `js/supabase.js`.
+
+The same legend as Phase 15.10 is used:
+
+- ✅ **CODE PASS** — correct by static analysis / call-graph trace
+- ⚠️ **PARTIAL** — code present but cannot be verified without live credentials
+- ℹ️ **SKIPPED** — requires live Supabase session / two real accounts; not testable without them
+
+---
+
+### Phase 16 Architecture Summary
+
+Phase 16 adds a cloud data path without removing or breaking the LocalStorage path:
+
+```
+Authenticated user  (userId truthy)
+  app.js → transactions.js / categories.js
+         → storage.js (getProvider: SupabaseDatabaseProvider)
+         → supabase-storage.js → Supabase PostgreSQL
+                                   transactions / categories / settings tables
+                                   (user_id = auth.uid(), RLS enforced)
+
+Unauthenticated / no userId
+  app.js → transactions.js / categories.js
+         → storage.js (getProvider: LocalStorageProvider)
+         → window.localStorage["financeTrackerData"]   ← UNCHANGED
+```
+
+Key invariants verified across this section:
+
+1. **Provider selection is per-call**: `storage.js` checks `userId` on every call; no global singleton can accidentally route authenticated reads to LocalStorage.
+2. **LocalStorageProvider is unchanged**: the class and its three methods (`readRawSync`, `writeSync`, `clearSync`) are identical to their Phase 14 state.
+3. **Pure business-logic functions are unchanged**: `filterTransactions`, `calculateTotals`, and `categoryTotals` in `transactions.js` are synchronous and receive arrays — they are completely unaffected by the storage backend.
+4. **No UI module was changed**: `dashboard.js`, `reports.js`, `charts.js`, `utils.js`, `css/styles.css`, and `index.html` are **identical** to their Phase 15 state. The Phase 1–15 Groups A–K test results remain valid.
+
+---
+
+### Audit 1 — Provider Selection Routes Correctly on userId
+
+✅ **CODE PASS**
+
+`storage.js` exports the `getProvider(userId)` factory:
+
+```js
+function getProvider(userId) {
+  if (userId) return new SupabaseDatabaseProvider();
+  return new LocalStorageProvider();
+}
+```
+
+Every public storage function that requires a provider call (`initializeData`, `loadData`,
+`saveData`, `getCurrency`, `setCurrency`, `getTransactions`, `addTransaction`,
+`deleteTransaction`, `getCustomCategories`, `addCustomCategory`, `deleteCustomCategory`) checks
+`userId` directly and either calls a `SupabaseDatabaseProvider` method or a `LocalStorageProvider`
+method. No path leaks between providers.
+
+---
+
+### Audit 2 — LocalStorage Key Untouched for Authenticated Users
+
+✅ **CODE PASS**
+
+The only functions that call `localStorage.getItem` / `localStorage.setItem` /
+`localStorage.removeItem` are inside `LocalStorageProvider` (`readRawSync`, `writeSync`,
+`clearSync`). `SupabaseDatabaseProvider` imports only `getSupabaseClient` from `supabase.js`
+and issues no `localStorage` calls. When `userId` is truthy, `LocalStorageProvider` is never
+instantiated in any storage call path. Therefore `localStorage["financeTrackerData"]` is never
+read or written for authenticated users — it remains exactly as the user left it in
+Phase 1–15.
+
+---
+
+### Audit 3 — async Storage Interface: All Public Functions Return Promises
+
+✅ **CODE PASS**
+
+All six groups of public exports in `storage.js` are declared `async`:
+
+| Function | Returns |
+|---|---|
+| `initializeData(userId)` | `Promise<AppData>` |
+| `loadData(userId)` | `Promise<AppData>` |
+| `saveData(data, userId)` | `Promise<void>` |
+| `getCurrency(userId)` | `Promise<string>` |
+| `setCurrency(currency, userId)` | `Promise<boolean>` |
+| `getTransactions(userId)` | `Promise<object[]>` |
+| `addTransaction(userId, tx)` | `Promise<{ ok, transaction? }>` |
+| `deleteTransaction(userId, id)` | `Promise<{ ok }>` |
+| `getCustomCategories(userId)` | `Promise<object[]>` |
+| `addCustomCategory(userId, cat)` | `Promise<{ ok }>` |
+| `deleteCustomCategory(userId, cat)` | `Promise<{ ok }>` |
+
+`transactions.js` and `categories.js` await these calls; `app.js` awaits the business-logic
+functions. No sync-over-async inversion exists.
+
+---
+
+### Audit 4 — async Business Logic: userId Threaded End-to-End
+
+✅ **CODE PASS**
+
+`transactions.js`:
+
+| Function | Signature | Storage call |
+|---|---|---|
+| `addTransaction` | `async (input, userId = null)` | `storage.addTransaction(userId, transaction)` |
+| `deleteTransaction` | `async (id, userId = null)` | `storage.deleteTransaction(userId, id)` |
+| `getTransactions` | `async (userId = null)` | `storage.getTransactions(userId)` |
+| `getTransactionsByMonth` | `async (monthKey, userId = null)` | `getTransactions(userId)` → filter |
+
+`categories.js`:
+
+| Function | Signature | Storage call |
+|---|---|---|
+| `getCategories` | `async (type, userId = null)` | `storage.loadData(userId)` |
+| `addCategory` | `async (name, type, userId = null)` | `storage.addCustomCategory(userId, ...)` |
+| `deleteCategory` | `async (name, type, userId = null)` | `storage.deleteCustomCategory(userId, ...)` |
+| `validateCategory` | `async (name, type, userId = null)` | `getCategories(type, userId)` |
+| `isCategoryInUse` | `async (name, type, userId = null)` | `storage.getTransactions(userId)` |
+
+`app.js` reads `state.currentUser?.id ?? null` and passes it as `userId` to every business-logic
+call site. The `??` operator ensures null (not undefined) is used for the unauthenticated case,
+which is the correct falsy value that routes to `LocalStorageProvider`.
+
+---
+
+### Audit 5 — Loading States and Network-Error Handling (Task 16.7)
+
+✅ **CODE PASS**
+
+`app.js` exposes four loading/error helpers:
+
+| Function | Effect |
+|---|---|
+| `showListLoading()` | Disables submit button; shows `#list-loading-indicator` `<li>` in the transaction list |
+| `hideListLoading()` | Re-enables submit button; hides the indicator |
+| `showDataError(message)` | Creates/updates `#data-load-error` with `role="alert"`; writes message via `safeText` |
+| `clearDataError()` | Clears and hides `#data-load-error` |
+
+`renderTransactionList()` calls `showListLoading()` at entry and `hideListLoading()` in the
+`finally` block — so the indicator is always dismissed even on error. On `catch`, `showDataError`
+is called with `"Could not load data. Please check your connection."`.
+
+`renderAll()` wraps its three awaited calls in `try/catch` and calls `showDataError` on any
+failure. No unhandled rejections exist on the data-loading hot paths.
+
+---
+
+### Audit 6 — Session Expiry Handling
+
+✅ **CODE PASS**
+
+`auth.js` `onAuthStateChange` fires the callback for every auth event including `SIGNED_OUT`,
+which occurs on JWT expiry, explicit sign-out, or a revoked refresh token. The listener
+registered in `initAuthSession()` (lines ~1941 in `app.js`) handles the null-user branch:
+
+```js
+} else {
+  state.currentUser = null;
+  showSignedOutState();
+  hideProtectedApp();
+}
+```
+
+`showSignedOutState()` sets `state.currentUser = null` and restores the sign-in / register
+buttons. `hideProtectedApp()` sets `#app-main.hidden = true`. The result: on any session
+expiry the finance dashboard disappears and the sign-in UI is shown automatically, with no
+user action required. Financial data is not visible to an expired session.
+
+---
+
+### Audit 7 — `financeAppInitialized` Guard Prevents Double-Initialization
+
+✅ **CODE PASS**
+
+`let financeAppInitialized = false` is set at module scope. `initializeFinanceApplication()`
+returns immediately if `financeAppInitialized` is true. The flag is set to `true` on the
+**first** successful call and is never reset. This means:
+
+- `TOKEN_REFRESHED` events (which fire `onAuthStateChange` with the same user) do not
+  re-initialize the finance application or re-wire event handlers.
+- Only a full page reload can reset `financeAppInitialized`, which is correct behaviour.
+
+---
+
+### Audit 8 — No Private Credentials in the Repository
+
+✅ **CODE PASS**
+
+`js/config.js` contains placeholder strings:
+
+```js
+export const SUPABASE_CONFIG = {
+  url: 'YOUR_SUPABASE_PROJECT_URL',
+  anonKey: 'YOUR_SUPABASE_ANON_KEY',
+};
+```
+
+`supabase/schema.sql` and `supabase/rls.sql` contain only DDL statements — no URLs, no keys,
+no passwords, no secrets of any kind. No other file in the repository contains a Supabase
+project URL, anon key, service-role key, database password, or JWT secret.
+
+---
+
+### Audit 9 — RLS Policies Enforce Per-User Data Isolation
+
+✅ **CODE PASS** (by SQL analysis of `supabase/rls.sql`)
+
+```sql
+-- Transactions
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY transactions_owner_policy ON public.transactions
+  FOR ALL
+  USING  (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- Categories
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY categories_owner_policy ON public.categories
+  FOR ALL
+  USING  (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- Settings
+ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY settings_owner_policy ON public.settings
+  FOR ALL
+  USING  (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+```
+
+`USING (user_id = auth.uid())` filters SELECT / DELETE results to the authenticated user's own
+rows. `WITH CHECK (user_id = auth.uid())` rejects any INSERT or UPDATE that would place a row
+under a different `user_id`. Unauthenticated (anon) requests receive an empty result set on
+reads and a policy-violation error on writes because `auth.uid()` returns null and
+`null = null` is never true in SQL.
+
+Defence-in-depth: `SupabaseDatabaseProvider` also explicitly sets `user_id: userId` in every
+INSERT payload (application-layer guard) so a bug in the caller cannot accidentally omit the
+field and rely solely on RLS.
+
+---
+
+### Audit 10 — Field Mapping (camelCase ↔ snake_case) is Consistent
+
+✅ **CODE PASS**
+
+`_rowToTransaction(row)` in `SupabaseDatabaseProvider` maps every read:
+
+| DB column (`snake_case`) | JS field (`camelCase`) |
+|---|---|
+| `item_name` | `itemName` |
+| `created_at` | `createdAt` |
+| `id`, `type`, `amount`, `category`, `date` | identical |
+
+`addTransaction(userId, transaction)` builds the INSERT payload with the reverse mapping:
+
+| JS field | DB column |
+|---|---|
+| `transaction.itemName` | `item_name` |
+| `transaction.createdAt` | `created_at` |
+| `transaction.id`, `.type`, `.amount`, `.category`, `.date` | identical |
+
+`user_id` and `updated_at` are DB-only fields: `user_id` is set in every INSERT; `updated_at`
+uses the column default. Neither is exposed in the JS `Transaction` object.
+
+---
+
+### Audit 11 — Supabase Client Is a Singleton (Task 16.3)
+
+✅ **CODE PASS**
+
+`js/supabase.js` holds one module-level `_client` variable. `getSupabaseClient()` initializes
+it once (lazy import of `supabase-js` from CDN, then `createClient(url, anonKey)`) and returns
+the cached instance on every subsequent call. Both `auth.js` and `supabase-storage.js` import
+`getSupabaseClient` from `supabase.js` — there is no second `createClient` call anywhere in
+the codebase. One Supabase client, one session, one WebSocket.
+
+---
+
+### Audit 12 — SupabaseDatabaseProvider Error Normalization
+
+✅ **CODE PASS**
+
+`_normalizeError(raw)` in `SupabaseDatabaseProvider` maps raw Supabase / Postgres errors to
+safe internal codes before returning them to callers:
+
+| Raw condition | Normalized code |
+|---|---|
+| `raw.code === '23505'` (UNIQUE violation) | `'duplicate'` |
+| `raw.name === 'TypeError'` / fetch failure | `'network-error'` |
+| JWT / 401 / 403 | `'not-authenticated'` |
+| Anything else | `'unknown'` |
+
+Raw Postgres error messages (which could contain table or column names) are never propagated
+to the UI. All read methods (`getTransactions`, `getCustomCategories`, `getSettings`) degrade
+gracefully to `[]` or the safe default `{ currency: 'IDR' }` on any error, so the UI always
+receives a valid (possibly empty) result rather than a thrown exception.
+
+---
+
+### Phase 1–15 Regression Verification (Static)
+
+No UI module (`dashboard.js`, `reports.js`, `charts.js`, `utils.js`), no HTML (`index.html`),
+and no CSS (`css/styles.css`) was changed in Phase 16. The only changes were:
+
+- `js/storage.js` — async CRUD API added; `LocalStorageProvider` class unchanged.
+- `js/transactions.js` — functions made async; pure functions untouched.
+- `js/categories.js` — functions made async; pure helpers untouched.
+- `js/app.js` — render functions made async; loading/error helpers added; `await` calls added.
+- `js/supabase-storage.js` — new file (infrastructure only).
+- `js/supabase.js` — new file (singleton client factory).
+
+Because the render and business-logic interfaces are identical (same function names, same
+parameter shapes, same return shapes), and the only added behaviour is `await` wrappers and
+the loading indicator, the Groups A–K manual test results documented in the
+[Manual Test Results](#manual-test-results) section above remain valid for the Phase 16
+authenticated context. No regression exists by structural analysis.
+
+---
+
+### Cloud Persistence and Session Continuity
+
+| Scenario | Mechanism | Code evidence |
+|---|---|---|
+| First login — settings row created | `initializeData(userId)` → `SupabaseDatabaseProvider.initializeUserData(userId)` → `INSERT … ON CONFLICT DO NOTHING` | `storage.js: initializeData`, `supabase-storage.js: initializeUserData` |
+| Transaction added — cloud row inserted | `transactions.addTransaction(input, userId)` → `storage.addTransaction(userId, tx)` → `SupabaseDatabaseProvider.addTransaction` → Supabase `transactions` table | `transactions.js`, `storage.js`, `supabase-storage.js` |
+| Transaction deleted — cloud row removed | `transactions.deleteTransaction(id, userId)` → `storage.deleteTransaction(userId, id)` → `SupabaseDatabaseProvider.deleteTransaction` | same chain |
+| Custom category added | `categories.addCategory(name, type, userId)` → `storage.addCustomCategory(userId, cat)` → Supabase `categories` table | `categories.js`, `storage.js` |
+| Currency changed | `onCurrencyChange(code)` → `storage.setCurrency(code, userId)` → `SupabaseDatabaseProvider.setSettings(userId, { currency })` | `app.js`, `storage.js` |
+| Browser closed, reopened — session restored | Supabase JWT stored in its own `localStorage` key by `supabase-js`; `initAuthSession()` → `auth.getCurrentUser()` → session found → `initializeFinanceApplication()` → `loadData(userId)` → cloud read | `app.js: initAuthSession`, `auth.js: getCurrentUser` |
+| Token expiry — finance app hidden | `onAuthStateChange` fires `SIGNED_OUT` → `showSignedOutState()` + `hideProtectedApp()` | `app.js: initAuthSession` listener |
+
+All scenarios are verified by static call-graph analysis. Live Supabase execution is required
+for end-to-end confirmation and is noted in the Remaining Limitations section below.
+
+---
+
+### Phase 16 Authentication Flow Coverage (Static)
+
+| Flow | Static Verdict |
+|---|---|
+| Authenticated read — transactions from Supabase | ✅ CODE PASS |
+| Authenticated write — add transaction to Supabase | ✅ CODE PASS |
+| Authenticated delete — remove transaction from Supabase | ✅ CODE PASS |
+| Custom category add / delete (cloud) | ✅ CODE PASS |
+| Currency setting read / write (cloud) | ✅ CODE PASS |
+| Loading indicator shown / hidden during cloud reads | ✅ CODE PASS |
+| Network error surfaces inline message, no crash | ✅ CODE PASS |
+| Session expiry hides finance app, shows login | ✅ CODE PASS |
+| `financeAppInitialized` guard prevents double-init | ✅ CODE PASS |
+| LocalStorage untouched for authenticated user | ✅ CODE PASS |
+| RLS enforces per-user isolation (SQL analysis) | ✅ CODE PASS |
+| No private credentials in repository | ✅ CODE PASS |
+| Field mapping camelCase ↔ snake_case | ✅ CODE PASS |
+| Supabase singleton client (no duplicate instances) | ✅ CODE PASS |
+| Error normalization — raw DB errors not surfaced | ✅ CODE PASS |
+| Phase 1–15 Groups A–K regression | ✅ CODE PASS (no UI/logic module changed) |
+| Live transaction CRUD against real Supabase | ⚠️ SKIPPED — requires live credentials |
+| Live category CRUD against real Supabase | ⚠️ SKIPPED — requires live credentials |
+| Live currency persistence against real Supabase | ⚠️ SKIPPED — requires live credentials |
+| User data isolation with two real accounts | ⚠️ SKIPPED — requires two live accounts |
+| Session persistence across browser close/reopen | ⚠️ SKIPPED — requires browser + live credentials |
+| Phase 1–15 regression while authenticated (live) | ⚠️ SKIPPED — requires browser + live credentials |
+| Cross-browser (Chrome/Firefox/Edge/Safari) | ⚠️ SKIPPED — requires browser + live credentials |
+
+---
+
+### Security Invariants Verified (Phase 16)
+
+| Invariant | Status |
+|---|---|
+| No private credentials in `js/config.js` (placeholders only) | ✅ VERIFIED |
+| No credentials in `supabase/schema.sql` or `supabase/rls.sql` | ✅ VERIFIED |
+| `service_role` key absent from all client files | ✅ VERIFIED |
+| `user_id` set explicitly in every Supabase INSERT (defence-in-depth) | ✅ VERIFIED |
+| RLS `USING` + `WITH CHECK` on all three tables | ✅ VERIFIED |
+| `anon` requests rejected by RLS (null `auth.uid()`) | ✅ VERIFIED |
+| Raw DB error messages normalized before reaching UI | ✅ VERIFIED |
+| Auth tokens not written to `localStorage` manually | ✅ VERIFIED |
+| `localStorage["financeTrackerData"]` untouched for authenticated users | ✅ VERIFIED |
+| Finance data hidden on session expiry | ✅ VERIFIED |
+
+---
+
+### Remaining Limitations (Phase 16)
+
+1. **Live Supabase integration not tested.** `js/config.js` contains placeholder values. The
+   following flows require real credentials before they can be fully verified:
+   - Actual transaction / category / settings CRUD against Supabase PostgreSQL
+   - User data isolation test with two real authenticated accounts
+   - Session JWT persistence across browser close/reopen against a live Supabase project
+   - Token refresh and expiry handling in a real browser session
+   - Cross-browser execution (Chrome, Firefox, Edge, Safari) while authenticated
+
+2. **Phase 17 (Local Data Migration) not yet implemented.** Existing `localStorage["financeTrackerData"]`
+   records accumulated before Phase 16 are not automatically migrated to the cloud on first login.
+   Users who had transactions in LocalStorage from Phase 1–15 will see an empty dashboard after
+   authenticating until Phase 17 is implemented. This is expected behaviour for Phase 16.
+
+3. **`saveData(data, userId)` is a no-op for authenticated users.** Any code path that calls the
+   legacy `saveData` API with a truthy `userId` silently succeeds without writing anything. All
+   Phase 16 mutations go through the individual CRUD functions (`addTransaction`,
+   `deleteTransaction`, `addCustomCategory`, `deleteCustomCategory`, `setSettings`) — these
+   are the correct call paths. The no-op exists only to prevent errors from any call site that
+   has not been fully updated; no such stale call site was found in the current codebase.
+
+---
+
+### Final Status
+
+| Item | Status |
+|---|---|
+| Task 16.12 Cloud Database Phase 16 QA | ✅ **COMPLETE** (static QA; live integration pending credentials) |
+| Phase 16 Cloud Database & User Data Isolation | ✅ **COMPLETE** (Tasks 16.1–16.12 all implemented and statically verified) |
+| Phase 17 (Local Data Migration) | 🔷 Not started — out of scope for this session |

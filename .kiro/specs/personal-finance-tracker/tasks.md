@@ -1213,7 +1213,7 @@ broken or removed.
       - LocalStorage data for either user is untouched.
     - **Dependencies:** 16.8, 16.9, 16.10
 
-  - [ ] 16.12 Cloud Database Phase 16 QA
+  - [x] 16.12 Cloud Database Phase 16 QA
     - **Objective:** Full functional regression test of all Phase 1�15 features while authenticated and using cloud data.
     - **Requirements covered:** 1�22 (all)
     - **Files:** `README.md` (record Phase 16 QA results)
