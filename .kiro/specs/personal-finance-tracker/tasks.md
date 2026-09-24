@@ -1,4 +1,4 @@
-ï»¿# Implementation Plan: Personal Finance Tracker (v1)
+# Implementation Plan: Personal Finance Tracker (v1)
 
 ## Overview
 
@@ -1045,16 +1045,16 @@ broken or removed.
 
 ---
 
-### Phase 16 ï¿½ Cloud Database & User Data Isolation
+### Phase 16 ? Cloud Database & User Data Isolation
 
 > **Scope note:** Phase 16 introduces Supabase PostgreSQL as the cloud data store for
 > authenticated users. LocalStorage remains the active provider for any unauthenticated
-> state and is left untouched for migration in Phase 17. All Phase 1ï¿½15 functionality
+> state and is left untouched for migration in Phase 17. All Phase 1?15 functionality
 > is preserved and unchanged.
 >
 > Implementation order: 16.1 ? 16.2 ? 16.3 ? 16.4 ? 16.5 ? 16.6 ? 16.7 ? 16.8 ? 16.9 ? 16.10 ? 16.11 ? 16.12
 
-- [ ] 16. Cloud Database & User Data Isolation
+- [x] 16. Cloud Database & User Data Isolation
   - [x] 16.1 Database Schema
     - **Objective:** Create the PostgreSQL schema for the three cloud finance tables (`transactions`, `categories`, `settings`) in the Supabase project, with all required constraints and indexes.
     - **Requirements covered:** 20 (user_id ownership), 10 (persistence), 13 (storage provider extensibility)
@@ -1065,7 +1065,7 @@ broken or removed.
       - `settings`: `user_id UUID PK REFERENCES auth.users(id) ON DELETE CASCADE`, `currency TEXT NOT NULL DEFAULT 'IDR'`, `created_at/updated_at TIMESTAMPTZ`.
       - Indexes: `idx_transactions_user_id ON transactions(user_id)`, `idx_transactions_user_date ON transactions(user_id, date)`. No redundant index on categories (UNIQUE constraint covers it). No index on settings.user_id (PK is auto-indexed).
       - Default categories remain JavaScript constants; no default-category rows are inserted.
-      - RLS is NOT enabled in this task ï¿½ Task 16.2 handles it.
+      - RLS is NOT enabled in this task ? Task 16.2 handles it.
       - Apply via Supabase SQL Editor or `supabase db push`.
     - **JavaScript ? PostgreSQL field mapping** (implemented by SupabaseDatabaseProvider in Task 16.4):
       - `itemName` ? `item_name`
@@ -1098,7 +1098,7 @@ broken or removed.
     - **Dependencies:** 16.1
 
   - [x] 16.3 Supabase Client Module (`supabase.js`)
-    - **Objective:** Create `js/supabase.js` as a lazy singleton factory for the Supabase client, then refactor `auth.js` to import from it ï¿½ eliminating future duplication between the auth and storage layers.
+    - **Objective:** Create `js/supabase.js` as a lazy singleton factory for the Supabase client, then refactor `auth.js` to import from it ? eliminating future duplication between the auth and storage layers.
     - **Requirements covered:** 22 (no credential exposure), 20 (shared authenticated client)
     - **Files:** `js/supabase.js` (new), `js/auth.js` (minor refactor)
     - **Implementation details:**
@@ -1112,7 +1112,7 @@ broken or removed.
     - **Dependencies:** 16.2
 
   - [x] 16.4 `SupabaseDatabaseProvider`
-    - **Objective:** Implement `SupabaseDatabaseProvider` in `storage.js` ï¿½ a record-level CRUD provider that reads and writes to the three Supabase tables.
+    - **Objective:** Implement `SupabaseDatabaseProvider` in `storage.js` ? a record-level CRUD provider that reads and writes to the three Supabase tables.
     - **Requirements covered:** 20, 10 (persistence), 13 (provider swappability)
     - **Files:** `js/storage.js`
     - **Implementation details:**
@@ -1135,7 +1135,7 @@ broken or removed.
     - **Implementation details:**
       - Convert `initializeData`, `getCurrency`, `setCurrency` and the new CRUD exports to `async` functions.
       - Provider selection: `const provider = userId ? new SupabaseDatabaseProvider(...) : new LocalStorageProvider()` resolved per-call or at initialization.
-      - `LocalStorageProvider` remains unchanged ï¿½ unauthenticated paths still work.
+      - `LocalStorageProvider` remains unchanged ? unauthenticated paths still work.
     - **Acceptance criteria:**
       - Calling storage functions with a valid `userId` routes to Supabase.
       - Calling without a `userId` (or with null) routes to LocalStorage.
@@ -1144,12 +1144,12 @@ broken or removed.
 
   - [x] 16.6 Async Business Logic
     - **Objective:** Make `transactions.js` and `categories.js` async throughout; thread `userId` (from `state.currentUser.id`) into all data operations.
-    - **Requirements covered:** 20, 1ï¿½8 (all data-touching requirements)
+    - **Requirements covered:** 20, 1?8 (all data-touching requirements)
     - **Files:** `js/transactions.js`, `js/categories.js`
     - **Implementation details:**
       - `transactions.js`: `addTransaction`, `deleteTransaction`, `getTransactions`, `getTransactionsByMonth` become `async`; accept `userId` parameter or read from a passed context.
       - `categories.js`: `getCategories`, `addCategory`, `deleteCategory`, `isCategoryInUse` become `async`.
-      - Pure functions (`filterTransactions`, `calculateTotals`, `categoryTotals`) stay synchronous ï¿½ they operate on arrays passed to them, not on storage.
+      - Pure functions (`filterTransactions`, `calculateTotals`, `categoryTotals`) stay synchronous ? they operate on arrays passed to them, not on storage.
     - **Acceptance criteria:**
       - All storage-touching functions in both modules return Promises.
       - Pure functions are unchanged.
@@ -1172,7 +1172,7 @@ broken or removed.
 
   - [x] 16.8 Transaction CRUD Verification
     - **Objective:** Verify that transactions can be created, read, and deleted from Supabase for an authenticated user, and that dashboard totals are computed from cloud data.
-    - **Requirements covered:** 1ï¿½3, 20
+    - **Requirements covered:** 1?3, 20
     - **Files:** None (verification only)
     - **Acceptance criteria:**
       - Add an income and an expense transaction ? both appear in the Supabase `transactions` table under the correct `user_id`.
@@ -1208,22 +1208,236 @@ broken or removed.
     - **Files:** None (verification only)
     - **Acceptance criteria:**
       - User A's transactions, categories, and settings are completely invisible to User B.
-      - Attempting a cross-user read via the Supabase JS client returns 0 rows (not an error, just empty ï¿½ RLS silently filters).
+      - Attempting a cross-user read via the Supabase JS client returns 0 rows (not an error, just empty ? RLS silently filters).
       - Attempting a cross-user INSERT with a spoofed `user_id` is rejected by the RLS `WITH CHECK` policy.
       - LocalStorage data for either user is untouched.
     - **Dependencies:** 16.8, 16.9, 16.10
 
   - [x] 16.12 Cloud Database Phase 16 QA
-    - **Objective:** Full functional regression test of all Phase 1ï¿½15 features while authenticated and using cloud data.
-    - **Requirements covered:** 1ï¿½22 (all)
+    - **Objective:** Full functional regression test of all Phase 1?15 features while authenticated and using cloud data.
+    - **Requirements covered:** 1?22 (all)
     - **Files:** `README.md` (record Phase 16 QA results)
     - **Implementation details:**
-      - Run the complete manual test matrix (Groups Aï¿½K from Phase 11) while authenticated with cloud data.
+      - Run the complete manual test matrix (Groups A?K from Phase 11) while authenticated with cloud data.
       - Verify loading states, error messages, session expiry handling.
-      - Confirm no Phase 1ï¿½15 regressions.
+      - Confirm no Phase 1?15 regressions.
       - Confirm LocalStorage `financeTrackerData` key is untouched (Phase 17 migration not triggered).
     - **Acceptance criteria:**
-      - All Phase 1ï¿½15 functional test cases pass while authenticated.
+      - All Phase 1?15 functional test cases pass while authenticated.
       - Cloud data persists correctly across browser close/reopen.
       - No regressions. No private credentials in the repository.
     - **Dependencies:** 16.11
+
+
+---
+
+### Phase 17 — Local Data Migration
+
+- [ ] 17. Local data migration from LocalStorage to Supabase
+  - [x] 17.1 Migration architecture and module scaffolding
+    - **Objective:** Create the `js/migration.js` module skeleton with documented interfaces, import the correct dependencies, and define the MigrationStatus type and migration marker schema.
+    - **Requirements covered:** 23.1, 23.11
+    - **Files:** `js/migration.js` (new)
+    - **Implementation details:**
+      - Create `js/migration.js` with module-level JSDoc, layer comment, and import statements for `storage.js` (LocalStorage path) and `supabase-storage.js`.
+      - Define the MigrationStatus enum values: `not-needed | available | validating | ready | in-progress | partial | completed | failed`.
+      - Define the migration marker schema (stored in LocalStorage under `financeTrackerMigration_${userId}`).
+      - Export stub functions: `getMigrationStatus`, `detectMigrationOpportunity`, `validateLocalData`, `startMigration`, `retryMigration`, `verifyMigration`, `clearMigrationMarker`.
+      - Do NOT modify any existing module.
+    - **Acceptance criteria:**
+      - `migration.js` imports correctly, exports all stubs, and does not break the existing app when imported.
+      - Migration marker key is user-scoped (includes userId, never email).
+    - **Dependencies:** 16.x (Phase 16 complete)
+
+  - [x] 17.2 Local data validation
+    - **Objective:** Implement `validateLocalData()` which reads LocalStorage and validates every transaction, custom category, and setting against the Phase 17 validation rules.
+    - **Requirements covered:** 23.3
+    - **Files:** `js/migration.js`
+    - **Implementation details:**
+      - Read LocalStorage via `storage.js` with no userId (LocalStorage path).
+      - Validate each transaction: id non-blank, type ? ['income','expense'], itemName non-blank, amount finite > 0, category non-blank, date matches YYYY-MM-DD and is valid calendar date, createdAt non-blank.
+      - Validate custom categories: name non-blank, type valid, no duplicate (name,type) pairs, not a default category.
+      - Validate settings: currency ? SUPPORTED_CURRENCIES.
+      - Return `{ valid: boolean, validTransactions: [], invalidTransactions: [], validCategories: [], invalidCategories: [], settings: {}, settingsValid: boolean, errors: [] }`.
+      - Invalid records are collected and returned — never silently dropped.
+    - **Acceptance criteria:**
+      - Invalid transactions (bad type, zero amount, invalid date, blank itemName) are identified and returned in `invalidTransactions`.
+      - Default category names are correctly excluded from `validCategories`.
+      - Settings with unsupported currency codes are reported in errors.
+    - **Dependencies:** 17.1
+
+  - [x] 17.3 Migration detection and status management
+    - **Objective:** Implement `detectMigrationOpportunity(userId)` and `getMigrationStatus(userId)` which determine whether migration is appropriate given the current state of LocalStorage and cloud data.
+    - **Requirements covered:** 23.1, 23.7, 23.11
+    - **Files:** `js/migration.js`
+    - **Implementation details:**
+      - `getMigrationStatus(userId)`: read the migration marker from LocalStorage key `financeTrackerMigration_${userId}`; return the stored status or `not-needed` / `available` based on detection.
+      - `detectMigrationOpportunity(userId)`: read local transaction count (no userId) and cloud transaction count (with userId). Return `{ needed, localCount, cloudCount, scenario }` where scenario is A/B/C/D/E per the design.
+      - Scenario A: local > 0, cloud = 0 ? needed = true.
+      - Scenario B: local = 0 ? needed = false.
+      - Scenario C/D/E: both > 0 ? needed = true (with conflict detection needed).
+      - Store migration marker with status `available` when migration is detected as needed.
+    - **Acceptance criteria:**
+      - Returns `not-needed` when LocalStorage has no transactions.
+      - Returns `available` when local transactions exist and user is authenticated.
+      - Marker is stored under a user-scoped key (never email-based).
+    - **Dependencies:** 17.1
+
+  - [x] 17.4 Transaction migration (idempotent upload)
+    - **Objective:** Implement the transaction migration path inside `startMigration`: validate, check for existing cloud IDs, skip duplicates, report conflicts, insert new records.
+    - **Requirements covered:** 23.4, 23.8
+    - **Files:** `js/migration.js`
+    - **Implementation details:**
+      - Fetch all cloud transaction IDs for the user via `SupabaseDatabaseProvider.getTransactions(userId)`.
+      - For each validated local transaction:
+        - Not in cloud ? INSERT via `SupabaseDatabaseProvider.addTransaction(userId, tx)`.
+        - In cloud with identical data ? SKIP.
+        - In cloud with different data ? add to conflicts list; do NOT insert or overwrite.
+      - Track migrated IDs in the migration marker after each successful insert.
+      - On network failure mid-batch ? set status to `partial`, preserve marker, allow retry.
+      - Retry (`retryMigration`): re-run skipping IDs already in `migratedTransactionIds`.
+    - **Acceptance criteria:**
+      - Running migration twice on the same local data does not create duplicate cloud transactions.
+      - Conflicting IDs are collected in a conflicts list and not inserted.
+      - Network failure during migration results in status `partial`, not `failed`.
+    - **Dependencies:** 17.2, 17.3
+
+  - [x] 17.5 Custom category migration (idempotent upload)
+    - **Objective:** Migrate local custom categories to the cloud categories table, skipping defaults and already-existing (user_id, name, type) rows.
+    - **Requirements covered:** 23.5, 23.8
+    - **Files:** `js/migration.js`
+    - **Implementation details:**
+      - Filter out default categories from local custom list.
+      - For each valid non-default custom category: call `SupabaseDatabaseProvider.addCustomCategory(userId, category)`.
+      - If the result is `{ ok: false, error: { code: 'duplicate' } }` ? skip (already exists in cloud).
+      - Track migrated categories in the migration marker.
+      - Retry: re-run skipping categories already in `migratedCategories`.
+    - **Acceptance criteria:**
+      - Default categories are never inserted into the cloud categories table.
+      - Running category migration twice does not produce duplicate errors (handled gracefully).
+    - **Dependencies:** 17.2, 17.3
+
+  - [ ] 17.6 Settings and currency migration
+    - **Objective:** Migrate the settings (currency) from LocalStorage to cloud, detecting and reporting currency conflicts.
+    - **Requirements covered:** 23.6, 23.8
+    - **Files:** `js/migration.js`
+    - **Implementation details:**
+      - Read local currency (`settings.currency` from LocalStorage).
+      - Read cloud currency via `SupabaseDatabaseProvider.getSettings(userId)`.
+      - If same ? upsert cloud settings with that currency value.
+      - If different ? return a conflict descriptor `{ type: 'currency-conflict', localCurrency, cloudCurrency }` — do NOT apply either automatically; the UI layer will prompt the user.
+      - After user selects currency ? call `SupabaseDatabaseProvider.setSettings(userId, { currency: chosen })` and update LocalStorage via `storage.setCurrency`.
+      - Track settings migration in the migration marker.
+    - **Acceptance criteria:**
+      - Same currency on both sides ? migrated silently.
+      - Different currencies ? conflict returned without auto-resolving.
+      - No currency conversion is performed on any transaction amount.
+    - **Dependencies:** 17.2, 17.3
+
+  - [ ] 17.7 Conflict handling and reporting
+    - **Objective:** Collect and surface all conflicts (transaction data conflicts, currency conflicts) to the UI layer in a structured format that can be presented to the user.
+    - **Requirements covered:** 23.4, 23.6, 23.7
+    - **Files:** `js/migration.js`
+    - **Implementation details:**
+      - Define a `MigrationConflict` shape: `{ type: 'transaction-data-conflict' | 'currency-conflict', localRecord?, cloudRecord?, localValue?, cloudValue? }`.
+      - `startMigration` returns `{ ok: boolean, status: MigrationStatus, conflicts: MigrationConflict[], migratedCount: number, skippedCount: number, failedCount: number }`.
+      - No conflict is silently resolved — all conflicts are returned to the caller (app.js / migration UI).
+      - Conflicts do NOT block non-conflicting records from being migrated.
+    - **Acceptance criteria:**
+      - Transaction with same ID but different amount in cloud ? reported as `transaction-data-conflict`, not inserted.
+      - Different currencies ? reported as `currency-conflict`, no currency applied automatically.
+      - Non-conflicting records are still migrated when conflicts exist.
+    - **Dependencies:** 17.4, 17.5, 17.6
+
+  - [ ] 17.8 Partial migration and retry mechanism
+    - **Objective:** Ensure migration is resumable: the migration marker tracks progress, retry skips already-completed records, and the app can distinguish a partial migration from a fresh one.
+    - **Requirements covered:** 23.8
+    - **Files:** `js/migration.js`
+    - **Implementation details:**
+      - After every successful INSERT (transaction or category), update the migration marker in LocalStorage with the new ID/category in the migrated list.
+      - `retryMigration(userId)`: load the migration marker, resume from where it stopped using the `migratedTransactionIds` and `migratedCategories` lists.
+      - Status transitions: `in-progress` ? `partial` on interruption; `partial` ? `in-progress` on retry; `in-progress` ? `completed` after verification.
+      - Distinguish status `partial` (interrupted) from `available` (never started).
+    - **Acceptance criteria:**
+      - Simulating a network failure mid-migration and retrying does not re-insert already-migrated records.
+      - Migration marker status is `partial` after interruption, not `completed`.
+    - **Dependencies:** 17.4, 17.5, 17.6
+
+  - [ ] 17.9 Migration verification
+    - **Objective:** Implement `verifyMigration(userId)` which confirms all migrated records are actually present in the cloud by fetching and comparing against the migration manifest.
+    - **Requirements covered:** 23.9
+    - **Files:** `js/migration.js`
+    - **Implementation details:**
+      - Fetch all cloud transactions for the user; compare IDs against `migratedTransactionIds` in the marker.
+      - Fetch all cloud custom categories; compare against `migratedCategories`.
+      - Fetch cloud settings; compare currency against the expected value.
+      - Spot-check: for a representative sample (up to 5 records), compare key field values (amount, type, itemName) not just IDs.
+      - Return `{ verified: boolean, transactionsMissing: [], categoriesMissing: [], settingsMatch: boolean, details: {} }`.
+      - Set migration marker status to `completed` only if ALL checks pass.
+    - **Acceptance criteria:**
+      - Returns `verified: false` if even one migrated ID is missing from cloud.
+      - Returns `verified: false` if spot-check field values do not match.
+      - Returns `verified: true` and sets status `completed` only when all checks pass.
+    - **Dependencies:** 17.4, 17.5, 17.6, 17.8
+
+  - [ ] 17.10 Migration UI
+    - **Objective:** Implement the migration UI in `index.html` and wire it in `app.js` — a modal or notification that detects migration opportunity after login, presents choices to the user, shows validation errors and conflicts, and allows the user to confirm, skip, or retry migration.
+    - **Requirements covered:** 23.2, 23.3, 23.4, 23.6, 23.7, 23.8, 23.9
+    - **Files:** `index.html`, `js/app.js`, `css/styles.css`
+    - **Implementation details:**
+      - After `initializeFinanceApplication()` completes and `detectMigrationOpportunity` returns `needed: true`, show the migration UI.
+      - Migration UI states:
+        - **Available**: "You have local data. Import to cloud?" with Import / Skip buttons.
+        - **Validating**: spinner/loading state.
+        - **Ready**: validation results shown (valid count, invalid count with details). User confirms.
+        - **Conflict**: currency conflict shown with local vs cloud currency and a pick-one selector.
+        - **In-progress**: progress indicator.
+        - **Partial**: "Migration was interrupted. Resume?" with Resume / Skip buttons.
+        - **Completed**: success message with count of migrated records. Optional "Clear local data" button.
+        - **Failed**: error message with retry option.
+      - All validation error details (invalid transaction list, conflicting transactions) are displayed to the user before confirming.
+      - Do NOT auto-delete LocalStorage. Only offer "Clear local data" after `verifyMigration` returns `verified: true` and user explicitly clicks it.
+      - Wire all states to `migration.js` functions. Do NOT inline migration logic in `app.js`.
+    - **Acceptance criteria:**
+      - Migration never starts without explicit user action.
+      - Invalid records are shown to the user before import proceeds.
+      - Currency conflict requires explicit user choice before proceeding.
+      - "Clear local data" button is only available after `verified: true`.
+    - **Dependencies:** 17.7, 17.9
+
+  - [ ] 17.11 LocalStorage preservation and cleanup
+    - **Objective:** Define and implement the LocalStorage preservation behavior — preserve migration marker and optionally preserve original local data as a backup after successful migration.
+    - **Requirements covered:** 23.10, 23.11
+    - **Files:** `js/migration.js`, `js/app.js`
+    - **Implementation details:**
+      - After `verifyMigration` returns `verified: true`, do NOT automatically delete LocalStorage finance data.
+      - Only delete LocalStorage finance data if the user explicitly clicks "Clear local data" in the migration UI.
+      - The migration marker (`financeTrackerMigration_${userId}`) is preserved even after LocalStorage finance data is cleared, so the app can detect the migration has already been completed for this user.
+      - `clearMigrationMarker(userId)`: removes the migration marker. Call only if the user explicitly resets migration state.
+      - Distinguish "LocalStorage is intentionally empty (never had data)" from "migration already completed" by checking the migration marker status for the current userId.
+    - **Acceptance criteria:**
+      - After successful migration and verification, LocalStorage finance data remains unless user explicitly clears it.
+      - After user clears local data, re-login does not prompt migration again (marker status = `completed`).
+      - Migration marker key is never based on email — always uses user.id UUID.
+    - **Dependencies:** 17.9, 17.10
+
+  - [ ] 17.12 Phase 17 QA
+    - **Objective:** Verify that all Phase 17 acceptance criteria are met, all migration scenarios (A-E) behave correctly, migration is idempotent, and no existing Phase 1-16 functionality is broken.
+    - **Requirements covered:** 23.1-23.13
+    - **Files:** `docs/rls-verification.md` (update), `README.md` (update)
+    - **Implementation details:**
+      - Manual test Scenario A (local only): confirm migration detects, offers import, migrates all records, verifies correctly.
+      - Manual test Scenario B (cloud only): confirm no migration prompt.
+      - Manual test Scenario C (both with non-overlapping data): confirm merge works correctly.
+      - Manual test Scenario D (identical data on both): confirm all records are skipped (0 inserted), verified = true.
+      - Manual test Scenario E (conflicting data): confirm conflicts are reported, non-conflicting records are still migrated.
+      - Simulate network failure mid-migration (DevTools offline): confirm status = partial, LocalStorage intact, retry completes without duplicates.
+      - Confirm default categories are never inserted into cloud.
+      - Confirm currency conflict prompts user choice and does not convert amounts.
+      - Confirm LocalStorage data is not deleted until user explicitly clicks "Clear local data".
+      - Confirm all Phase 1-16 functionality still works after Phase 17 changes.
+    - **Acceptance criteria:**
+      - All 5 scenarios produce the correct behavior per design.
+      - Retry after partial migration produces 0 duplicate records.
+      - No existing test cases from Phases 1-16 fail.
+    - **Dependencies:** 17.11

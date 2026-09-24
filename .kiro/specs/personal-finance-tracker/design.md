@@ -816,7 +816,7 @@ Designed for, **not built in v1** (Req 13, product/structure steering):
 
 ---
 
-## Phase 15 � Authentication Architecture Extension
+## Phase 15 � Authentication Architecture Extension
 
 > **Scope boundary:** The design sections above describe the complete v1 architecture (LocalStorage,
 > no authentication). This section documents the Phase 15 authentication extension and the planned
@@ -826,16 +826,16 @@ Designed for, **not built in v1** (Req 13, product/structure steering):
 
 | Phase      | Scope                                              | Storage backend     |
 |------------|----------------------------------------------------|---------------------|
-| Phase 1�14 | Finance tracker, no auth                          | LocalStorage only   |
+| Phase 1�14 | Finance tracker, no auth                          | LocalStorage only   |
 | Phase 15   | Supabase Auth (email/password)                    | LocalStorage only   |
 | Phase 16   | Cloud database (Supabase PostgreSQL)              | Supabase DB         |
 | Phase 17   | LocalStorage ? cloud migration                    | Both (transition)   |
 | Phase 18   | Security / session hardening                      | Supabase DB         |
 
-### Phase 15 � Current Authentication Architecture
+### Phase 15 � Current Authentication Architecture
 
 ```
-UI (index.html � auth forms: login, register, forgot-password)
+UI (index.html � auth forms: login, register, forgot-password)
  ?
 app.js  (bootstrap, auth-state routing, onAuthStateChange gate)
  ?
@@ -857,14 +857,14 @@ LocalStorage
 Authentication and finance data are **completely decoupled** in Phase 15. `auth.js` does not touch
 `storage.js`, and `storage.js` does not know about authentication.
 
-### Phase 15 � Module Additions
+### Phase 15 � Module Additions
 
 | Module        | Layer          | Responsibility                                                                 |
 |---------------|----------------|--------------------------------------------------------------------------------|
-| `js/config.js` | Configuration | Exports `SUPABASE_CONFIG = { url, anonKey }` � the only place public Supabase credentials live. No private credentials. |
+| `js/config.js` | Configuration | Exports `SUPABASE_CONFIG = { url, anonKey }` � the only place public Supabase credentials live. No private credentials. |
 | `js/auth.js`  | Auth service   | Provider-neutral AuthProvider API: `signUp`, `signIn`, `signOut`, `getCurrentUser`, `onAuthStateChange`, `resetPassword`. Normalizes Supabase error codes. |
 
-### Phase 15 � AuthProvider API
+### Phase 15 � AuthProvider API
 
 ```js
 // Normalized result shape for all auth operations:
@@ -882,7 +882,7 @@ onAuthStateChange(callback):       void   // callback({ user } | { user: null })
 resetPassword(email):              Promise<AuthResult>
 ```
 
-### Phase 15 � App Bootstrap with Auth Gate
+### Phase 15 � App Bootstrap with Auth Gate
 
 ```js
 // app.js bootstrap (Phase 15+):
@@ -904,14 +904,14 @@ async function bootstrap() {
 The finance dashboard HTML sections are hidden by default and revealed only after auth confirmation,
 preventing any flash of financial data to unauthenticated users (Req 19.6).
 
-### Future Phase 16 � Cloud Database Architecture (planned, not built)
+### Future Phase 16 � Cloud Database Architecture (planned, not built)
 
 ```
 Finance Data
  ?
 StorageProvider  (existing abstraction seam in storage.js)
  ?
-SupabaseDatabaseProvider  (Phase 16 � new implementation of StorageProvider)
+SupabaseDatabaseProvider  (Phase 16 � new implementation of StorageProvider)
  ?
 Supabase PostgreSQL
 ```
@@ -924,7 +924,7 @@ exact extension point for Phase 16. No changes to business logic or UI modules a
 ```
 Supabase Auth
       ?
-authenticated user.id  (immutable; never the email address � Req 20)
+authenticated user.id  (immutable; never the email address � Req 20)
       ?
 future user_id column on financial records
       ?
@@ -944,3 +944,363 @@ Email may change; `user.id` never does. This constraint applies to Phase 16 tabl
 - Authentication tokens (JWTs) are managed by `supabase-js` and never logged.
 - Plaintext passwords are never stored; Supabase Auth handles all password hashing.
 - `auth.js` uses `safeText` / `textContent` for all user-facing error messages (no `innerHTML`).
+
+
+---
+
+## Phase 17 — Local Data Migration Architecture
+
+> **Scope note:** Phase 17 introduces a controlled migration path for users who accumulated
+> financial data in LocalStorage (Phases 1–16) and then sign in with a Supabase account. The
+> migration is explicit, idempotent, and reversible. No existing module is modified; migration
+> logic lives entirely in a new `js/migration.js` module.
+
+### Scope Boundary
+
+| Phase | Scope | Storage backend |
+|-------|-------|-----------------|
+| Phase 1–14 | Finance tracker, no auth | LocalStorage only |
+| Phase 15 | Supabase Auth (email/password) | LocalStorage only |
+| Phase 16 | Cloud database (Supabase PostgreSQL) | Supabase DB |
+| **Phase 17** | **LocalStorage → cloud migration** | **Both (transition)** |
+| Phase 18 | Security / session hardening | Supabase DB |
+
+### Migration Module: `js/migration.js`
+
+**Layer position:** UI glue (`app.js`) → `migration.js` → `storage.js` + `supabase-storage.js`
+
+`migration.js` is the only new file introduced in Phase 17. It imports:
+- `storage.js` (LocalStorage path — called without `userId` to read local data)
+- `supabase-storage.js` (`SupabaseDatabaseProvider` — called with `userId` to read/write cloud data)
+
+`migration.js` does **not** import `auth.js` directly. The authenticated `userId` is passed in by
+`app.js` at the call site.
+
+### Migration States
+
+```
+not-needed   — no local financial data present, or migration already completed for this user
+available    — local data present, user authenticated, migration not yet started
+validating   — pre-migration validation in progress
+ready        — validation passed, awaiting user confirmation to proceed
+in-progress  — upload in progress
+partial      — some records uploaded, migration interrupted (network failure etc.); retryable
+completed    — all records uploaded and verified in cloud
+failed       — unrecoverable error (e.g. auth session lost mid-migration)
+```
+
+Status transitions:
+
+```
+not-needed / available  →  validating  →  ready  →  in-progress  →  completed
+                                                            ↓
+                                                         partial  →  in-progress  →  completed
+                                                            ↓
+                                                          failed
+```
+
+### Migration Status Storage
+
+Status is stored in LocalStorage under the key `financeTrackerMigration_${userId}`, where
+`userId` is the authenticated user's immutable Supabase UUID (never their email address).
+
+Migration marker schema (JSON, stored under the user-scoped key):
+
+```json
+{
+  "userId": "supabase-uuid (string, never email)",
+  "status": "not-needed | available | validating | ready | in-progress | partial | completed | failed",
+  "migratedTransactionIds": ["uuid1", "uuid2", "..."],
+  "migratedCategories": [
+    { "name": "category-name", "type": "expense | income" }
+  ],
+  "settingsMigrated": false,
+  "conflicts": [
+    {
+      "type": "transaction-data-conflict | currency-conflict",
+      "transactionId": "uuid (for transaction conflicts)",
+      "localValue": "(summary of differing field)",
+      "cloudValue": "(summary of differing field)"
+    }
+  ],
+  "startedAt": "ISO 8601 timestamp",
+  "completedAt": "ISO 8601 timestamp or null"
+}
+```
+
+The marker key is scoped to `userId` so markers for different users are fully independent and
+cannot be read or modified by another user.
+
+### Migration Detection
+
+Detection is additive — it does not modify `bootstrap()`, `initAuthSession()`, or
+`initializeFinanceApplication()`. Instead, it runs **after** `initializeFinanceApplication()`
+completes inside the `onAuthStateChange` callback in `initAuthSession()` (in `app.js`):
+
+```
+onAuthStateChange callback (user present):
+  → state.currentUser = user
+  → showProtectedApp()
+  → initializeFinanceApplication()  (guarded by financeAppInitialized)
+  → detectMigrationOpportunity(userId)   ← Phase 17 addition
+      if needed → show migration UI
+```
+
+`detectMigrationOpportunity(userId)` reads:
+- Local transaction count via `storage.getTransactions(null)` (LocalStorage path, no userId)
+- Cloud transaction count via `SupabaseDatabaseProvider.getTransactions(userId)` (cloud path)
+- Existing migration marker from `financeTrackerMigration_${userId}`
+
+It returns `{ needed: boolean, localCount: number, cloudCount: number, scenario: 'A'|'B'|'C'|'D'|'E' }`.
+
+Scenario classification:
+
+| Scenario | Local count | Cloud count | Needed |
+|----------|-------------|-------------|--------|
+| A | > 0 | 0 | true |
+| B | 0 | > 0 | false |
+| C | > 0 | > 0, no overlapping IDs | true |
+| D | > 0 | > 0, all IDs identical, data identical | true (verifies as 0 inserts) |
+| E | > 0 | > 0, overlapping IDs with differing data | true |
+
+### Validation Layer
+
+`validateLocalData()` reads `financeTrackerData` from LocalStorage (no userId) and applies the
+following rules before any upload attempt:
+
+**Transaction validation rules:**
+
+| Field | Rule |
+|-------|------|
+| `id` | Non-blank string |
+| `type` | Exactly `'income'` or `'expense'` |
+| `itemName` | Non-blank after `.trim()` |
+| `amount` | `typeof n === 'number' && isFinite(n) && n > 0` |
+| `category` | Non-blank after `.trim()` |
+| `date` | Matches `/^\d{4}-\d{2}-\d{2}$/` AND passes `utils.isValidDate()` |
+| `createdAt` | Non-blank string |
+
+**Custom category validation rules:**
+
+| Rule | Detail |
+|------|--------|
+| `name` non-blank | After `.trim()` |
+| `type` valid | Exactly `'income'` or `'expense'` |
+| No duplicate `(name, type)` | In the local custom list |
+| Not a default category | Checked against `DEFAULT_EXPENSE_CATEGORIES` and `DEFAULT_INCOME_CATEGORIES` sets |
+
+**Settings validation rules:**
+
+| Field | Rule |
+|-------|------|
+| `currency` | Member of `SUPPORTED_CURRENCIES` (14 ISO 4217 codes) |
+
+`validateLocalData()` returns:
+```js
+{
+  valid: boolean,
+  validTransactions: Transaction[],
+  invalidTransactions: { record: Transaction, errors: string[] }[],
+  validCategories: { name: string, type: string }[],
+  invalidCategories: { record: object, errors: string[] }[],
+  settings: { currency: string },
+  settingsValid: boolean,
+  errors: string[]
+}
+```
+
+Invalid records are **never silently dropped** — they are collected and returned so the UI layer
+can present them to the user before migration proceeds.
+
+### Idempotency Strategy
+
+#### Transactions
+
+The `transactions.id` value (client-generated UUID, TEXT PRIMARY KEY in the DB) is the
+idempotency key. Before any INSERT attempt, `migration.js` fetches all existing cloud
+transaction IDs for the user and builds a lookup set. For each local transaction:
+
+| Case | Local ID in cloud? | Data match? | Action |
+|------|--------------------|-------------|--------|
+| 1 | No | N/A | INSERT via `SupabaseDatabaseProvider.addTransaction(userId, tx)` |
+| 2 | Yes | Identical | SKIP (already migrated) |
+| 3 | Yes | Differs | Record as `transaction-data-conflict`; do NOT insert |
+| 4 | Cloud-only ID | N/A | IGNORE (do not delete cloud-only records) |
+
+After each successful INSERT, the transaction ID is appended to `migratedTransactionIds` in the
+migration marker and the marker is saved to LocalStorage. This makes every individual record
+insert atomic and retry-safe.
+
+#### Custom Categories
+
+Use the DB `UNIQUE(user_id, name, type)` constraint. Attempt INSERT via
+`SupabaseDatabaseProvider.addCustomCategory(userId, category)`. If the result is
+`{ ok: false, error: { code: 'duplicate' } }` → already exists, skip without error.
+
+Default categories are filtered out before any INSERT attempt (compared against
+`DEFAULT_EXPENSE_CATEGORIES` and `DEFAULT_INCOME_CATEGORIES` sets — never inserted into the
+cloud `categories` table).
+
+### Settings / Currency Conflict
+
+1. Read `local.settings.currency` from LocalStorage.
+2. Read `cloud.settings.currency` via `SupabaseDatabaseProvider.getSettings(userId)`.
+3. If same → upsert cloud settings with that value; set `settingsMigrated: true` in marker.
+4. If different → return a conflict descriptor to the caller:
+   `{ type: 'currency-conflict', localCurrency: 'USD', cloudCurrency: 'IDR' }`
+   The UI layer presents both values and requires the user to pick one. After selection:
+   - Apply chosen currency to cloud via `SupabaseDatabaseProvider.setSettings(userId, { currency: chosen })`
+   - Apply chosen currency to LocalStorage via `storage.setCurrency(chosen, null)`
+   - Set `settingsMigrated: true` in marker
+
+**No exchange-rate conversion is performed under any circumstances.**
+
+### Partial Migration and Retry
+
+Every successful record INSERT updates the migration marker before moving to the next record.
+On network failure mid-migration:
+1. The current batch loop stops.
+2. Migration status is set to `partial`.
+3. Migration marker is saved with the current `migratedTransactionIds` and `migratedCategories`.
+4. LocalStorage finance data is left completely untouched.
+5. The UI shows a "Resume" option.
+
+`retryMigration(userId)` loads the existing marker and resumes from where it stopped:
+- Skips transaction IDs already in `migratedTransactionIds`.
+- Skips categories already in `migratedCategories`.
+- Re-attempts unfinished inserts.
+
+This makes retry fully idempotent — running it multiple times cannot create duplicate cloud
+records.
+
+### Migration Verification
+
+`verifyMigration(userId)` runs after all uploads complete:
+
+1. **Transaction ID check**: Fetch all cloud transaction IDs → compare against
+   `migratedTransactionIds`. All migrated IDs must be present.
+2. **Category check**: Fetch all cloud custom categories → compare against
+   `migratedCategories`. All migrated `(name, type)` pairs must be present.
+3. **Settings check**: Fetch cloud settings → `currency` must match the applied value.
+4. **Spot-check**: For up to 5 records sampled from `migratedTransactionIds`, fetch the full
+   cloud record and compare `amount`, `type`, and `itemName` against the local source.
+   Count-only verification is not sufficient.
+
+Returns:
+```js
+{
+  verified: boolean,
+  transactionsMissing: string[],    // IDs expected but not found in cloud
+  categoriesMissing: { name, type }[],
+  settingsMatch: boolean,
+  spotCheckPassed: boolean,
+  details: { totalExpected: number, totalFound: number, spotChecked: number }
+}
+```
+
+Migration marker status is set to `'completed'` **only** when `verified === true`. If any
+check fails, status remains `'partial'` and the user can retry.
+
+### LocalStorage Preservation
+
+After `verifyMigration` returns `verified: true`:
+- LocalStorage `financeTrackerData` is **not** deleted automatically.
+- The migration UI shows an optional "Clear local data" button.
+- Only if the user explicitly clicks "Clear local data" does `app.js` call
+  `storage.clearData(null)` (LocalStorage path).
+- The migration marker (`financeTrackerMigration_${userId}`) is **preserved even after
+  clearing local finance data** so the app can recognize a completed migration on subsequent
+  logins and not prompt again.
+
+`clearMigrationMarker(userId)` removes the marker key from LocalStorage. This should only be
+called if the user explicitly chooses to reset migration state (e.g. "Start over").
+
+### Module Interface (design — not implementation)
+
+```js
+// js/migration.js — to be implemented in Phase 17 tasks
+
+/**
+ * @typedef {'not-needed'|'available'|'validating'|'ready'|'in-progress'|'partial'|'completed'|'failed'} MigrationStatus
+ */
+
+/**
+ * Read the current migration status from the user-scoped LocalStorage marker.
+ * Returns 'not-needed' if no marker exists.
+ * @param {string} userId  Supabase user UUID (never email)
+ * @returns {MigrationStatus}
+ */
+getMigrationStatus(userId)
+
+/**
+ * Determine whether migration is appropriate for the current user.
+ * Reads both local and cloud transaction counts.
+ * @param {string} userId
+ * @returns {Promise<{ needed: boolean, localCount: number, cloudCount: number, scenario: 'A'|'B'|'C'|'D'|'E' }>}
+ */
+detectMigrationOpportunity(userId)
+
+/**
+ * Validate all local data (transactions, categories, settings) against migration rules.
+ * Does NOT write anything to cloud or modify LocalStorage.
+ * @returns {Promise<ValidationResult>}
+ */
+validateLocalData()
+
+/**
+ * Execute migration: upload validated local records to cloud.
+ * Idempotent: records already in cloud are skipped.
+ * @param {string} userId
+ * @param {{ chosenCurrency?: string }} [options]
+ * @returns {Promise<MigrationResult>}
+ */
+startMigration(userId, options)
+
+/**
+ * Resume a partial migration from the saved migration marker.
+ * @param {string} userId
+ * @returns {Promise<MigrationResult>}
+ */
+retryMigration(userId)
+
+/**
+ * Verify that all migrated records are present and correct in cloud.
+ * Sets marker status to 'completed' only on full success.
+ * @param {string} userId
+ * @returns {Promise<VerificationResult>}
+ */
+verifyMigration(userId)
+
+/**
+ * Remove the migration marker from LocalStorage.
+ * Call only when the user explicitly resets migration state.
+ * @param {string} userId
+ * @returns {void}
+ */
+clearMigrationMarker(userId)
+```
+
+### Interaction with Existing Modules
+
+| Module | Phase 17 change |
+|--------|----------------|
+| `js/migration.js` | New file (Phase 17). Imports `storage.js` and `supabase-storage.js`. |
+| `js/app.js` | Additive only: call `detectMigrationOpportunity(userId)` after `initializeFinanceApplication()`; wire migration UI events to `migration.js` functions. |
+| `js/storage.js` | Not modified. Migration reads LocalStorage via `storage.getTransactions(null)`, `storage.getCustomCategories(null)`, `storage.getCurrency(null)`, `storage.clearData(null)`. |
+| `js/supabase-storage.js` | Not modified. Migration writes to cloud via `SupabaseDatabaseProvider` methods. |
+| `index.html` | Additive only: migration UI section (modal / notification). |
+| `css/styles.css` | Additive only: migration UI styles. |
+
+No existing Phase 1–16 module is changed or broken by Phase 17.
+
+### Security Invariants (Phase 17)
+
+- `userId` passed to all migration functions is the caller-supplied Supabase UUID from
+  `state.currentUser.id` — never derived from email, username, or display name.
+- No service-role key or admin API is used during migration.
+- RLS policies (`user_id = auth.uid()`) remain the database-level boundary. The migration
+  client uses the same authenticated session as the rest of the app.
+- All migrated records have `user_id` set explicitly to the authenticated user's UUID
+  (defence-in-depth alongside RLS, consistent with `SupabaseDatabaseProvider` patterns).
+- The migration marker key includes `userId` so other users' browsers cannot read or modify it.
+- No migration credentials, tokens, or record values are logged.

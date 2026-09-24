@@ -671,6 +671,37 @@
         "chatSessionId": "sess_4835eeea-bc95-4b40-ac07-2d5cb45efd57",
         "timestamp": 1790220773844
       }
+    ],
+    "16. Cloud Database & User Data Isolation": [
+      {
+        "executionId": "6a965ac4-7dde-4d80-b259-9195ec7fe31e",
+        "chatSessionId": "sess_da522149-482b-4fec-9cae-bcb0470ba418",
+        "timestamp": 1790221392162
+      }
+    ],
+    "17.2 Local data validation": [
+      {
+        "executionId": "2d88c0d8-c3f8-4ef2-92e8-f23eec38a0b8",
+        "chatSessionId": "sess_0e679f76-6d08-4f5a-afb9-cfcdebf96f4c",
+        "timestamp": 1790224439697
+      },
+      {
+        "executionId": "2d88c0d8-c3f8-4ef2-92e8-f23eec38a0b8",
+        "chatSessionId": "sess_0e679f76-6d08-4f5a-afb9-cfcdebf96f4c",
+        "timestamp": 1790224532170
+      }
+    ],
+    "17.3 Migration detection and status management": [
+      {
+        "executionId": "a7383f25-954f-41f3-8bb1-dd9149ab9e6e",
+        "chatSessionId": "sess_9a6be9d3-f6ee-423b-9fe6-7a8a88d2af44",
+        "timestamp": 1790224593968
+      },
+      {
+        "executionId": "a7383f25-954f-41f3-8bb1-dd9149ab9e6e",
+        "chatSessionId": "sess_9a6be9d3-f6ee-423b-9fe6-7a8a88d2af44",
+        "timestamp": 1790226325510
+      }
     ]
   }
 }

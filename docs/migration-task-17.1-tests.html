@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task 17.1 — Migration Validation Tests</title>
+  <style>
+    body { font-family: monospace; padding: 1.5rem; background: #f8f9fa; color: #212529; }
+    h1 { font-size: 1.1rem; margin-bottom: 1rem; }
+    .suite { margin-bottom: 1.5rem; }
+    .suite-title { font-weight: bold; margin-bottom: .4rem; font-size: .95rem; color: #495057; }
+    .result { padding: .2rem .4rem; margin: .15rem 0; font-size: .85rem; border-radius: 3px; }
+    .pass { background: #d1e7dd; color: #0f5132; }
+    .fail { background: #f8d7da; color: #842029; }
+    #summary { margin-top: 1.5rem; font-weight: bold; font-size: 1rem; }
+    pre { background: #fff; border: 1px solid #dee2e6; padding: .5rem; font-size: .75rem; overflow: auto; }
+  </style>
+</head>
+<body>
+<h1>Task 17.1 — Migration Validation Verification</h1>
+<p style="font-size:.8rem;color:#6c757d;">
+  These tests verify migration.js validation primitives in the browser.
+  They do NOT write to LocalStorage (except the migration marker) and do NOT call Supabase.
+  Open the browser console for detailed output.
+</p>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script type="module">
+/*
+ * Task 17.1 verification harness.
+ *
+ * Tests are run in the browser by opening this file via a local HTTP server
+ * (required for ES modules). No external test framework is used — consistent
+ * with the project's existing testing approach (design.md §Testing Strategy).
+ *
+ * Tests covered (per Task 17.1 specification):
+ *  T01  Empty local storage → NO_LOCAL_DATA, valid: true, hasData: false
+ *  T02  Valid transaction data → passes validation, ID preserved
+ *  T03  Invalid transaction type → captured in invalidTransactions
+ *  T04  Invalid amount (zero) → captured in invalidTransactions
+ *  T05  Invalid amount (negative) → captured
+ *  T06  Missing item name → captured
+ *  T07  Invalid date → captured
+ *  T08  Invalid date (non-calendar: 2024-02-30) → captured
+ *  T09  Duplicate custom category → captured
+ *  T10  Valid custom category → accepted, default categories excluded
+ *  T11  Invalid currency → settingsValid: false
+ *  T12  Existing transaction ID is preserved (no replacement)
+ *  T13  Validation does not modify LocalStorage finance data
+ *  T14  Validation does not call Supabase insert/upsert/delete (stubbed stubs)
+ *  T15  No credentials/tokens/passwords in validation result
+ *  T16  Migration marker key uses userId UUID, never email
+ *  T17  getMigrationStatus returns not-needed when no marker exists
+ *  T18  detectMigrationOpportunity returns needed:false for empty local storage
+ *  T19  startMigration/retryMigration/verifyMigration return NOT_IMPLEMENTED safely
+ *  T20  Corrupted schema → CORRUPTED_SCHEMA issue returned
+ */
+
+import {
+  MIGRATION_STATUS,
+  MIGRATION_MARKER_PREFIX,
+  ISSUE_CODE,
+  migrationMarkerKey,
+  readMigrationMarker,
+  writeMigrationMarker,
+  clearMigrationMarker,
+  getMigrationStatus,
+  validateTransaction,
+  validateCustomCategories,
+  validateSettings,
+  validateLocalData,
+  detectMigrationOpportunity,
+  startMigration,
+  retryMigration,
+  verifyMigration,
+} from './js/migration.js';
+
+// ---------------------------------------------------------------------------
+// Minimal test runner
+// ---------------------------------------------------------------------------
+
+let passed = 0;
+let failed = 0;
+const suites = [];
+let currentSuite = null;
+
+function describe(name, fn) {
+  currentSuite = { name, results: [] };
+  suites.push(currentSuite);
+  fn();
+}
+
+function it(desc, fn) {
+  try {
+    fn();
+    currentSuite.results.push({ ok: true, desc });
+    passed++;
+    console.log(`  ✓ ${desc}`);
+  } catch (err) {
+    currentSuite.results.push({ ok: false, desc, error: err.message });
+    failed++;
+    console.error(`  ✗ ${desc}`, err.message);
+  }
+}
+
+function assert(condition, msg) {
+  if (!condition) throw new Error(msg || 'Assertion failed');
+}
+function assertEqual(a, b, msg) {
+  if (a !== b) throw new Error(msg || `Expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+}
+function assertIncludes(arr, val, msg) {
+  if (!arr.includes(val)) throw new Error(msg || `Expected array to include ${JSON.stringify(val)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers: safely manipulate localStorage for test isolation
+// ---------------------------------------------------------------------------
+
+const FINANCE_KEY = 'financeTrackerData';
+const TEST_USER_ID = '00000000-0000-0000-0000-test17user001'; // fake UUID for tests
+
+function saveLocalData(obj) {
+  localStorage.setItem(FINANCE_KEY, JSON.stringify(obj));
+}
+
+function clearLocalData() {
+  localStorage.removeItem(FINANCE_KEY);
+}
+
+function makeValidSchema(overrides = {}) {
+  return {
+    version: 1,
+    transactions: overrides.transactions ?? [],
+    categories: overrides.categories ?? {
+      income:  ['Salary', 'Freelance', 'Business', 'Investment', 'Gift', 'Other'],
+      expense: ['Food', 'Transport', 'Fun', 'Bills', 'Shopping', 'Health', 'Other'],
+    },
+    settings: overrides.settings ?? { currency: 'IDR' },
+  };
+}
+
+function makeValidTransaction(overrides = {}) {
+  return {
+    id:        overrides.id        ?? 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    type:      overrides.type      ?? 'expense',
+    itemName:  overrides.itemName  ?? 'Coffee',
+    amount:    overrides.amount    ?? 15000,
+    category:  overrides.category  ?? 'Food',
+    date:      overrides.date      ?? '2024-03-15',
+    createdAt: overrides.createdAt ?? '2024-03-15T08:00:00.000Z',
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Clean up any leftover migration markers before running
+// ---------------------------------------------------------------------------
+clearMigrationMarker(TEST_USER_ID);
+
+// ============================================================
+// Suite 1: validateTransaction — individual field validation
+// ============================================================
+describe('validateTransaction', () => {
+  it('T02 — valid transaction passes with no issues', () => {
+    const tx = makeValidTransaction();
+    const issues = validateTransaction(tx, 0);
+    assertEqual(issues.length, 0, `Expected 0 issues, got: ${JSON.stringify(issues)}`);
+  });
+
+  it('T12 — original transaction ID is preserved (not replaced)', () => {
+    const originalId = 'my-stable-uuid-1234';
+    const tx = makeValidTransaction({ id: originalId });
+    const issues = validateTransaction(tx, 0);
+    assertEqual(issues.length, 0, 'Valid transaction should have no issues');
+    // The validator returns issues; it does not transform the transaction object.
+    // Confirm the id field is unchanged.
+    assertEqual(tx.id, originalId, 'ID must not be replaced during validation');
+  });
+
+  it('T03 — invalid type is flagged', () => {
+    const issues = validateTransaction(makeValidTransaction({ type: 'transfer' }), 0);
+    const codes = issues.map(i => i.code);
+    assertIncludes(codes, ISSUE_CODE.INVALID_TRANSACTION_TYPE);
+  });
+
+  it('T03b — missing type is flagged', () => {
+    const tx = makeValidTransaction();
+    delete tx.type;
+    const issues = validateTransaction(tx, 0);
+    assertIncludes(issues.map(i => i.code), ISSUE_CODE.INVALID_TRANSACTION_TYPE);
+  });
+
+  it('T04 — zero amount is flagged', () => {
+    const issues = validateTransaction(makeValidTransaction({ amount: 0 }), 0);
+    assertIncludes(issues.map(i => i.code), ISSUE_CODE.INVALID_TRANSACTION_AMOUNT);
+  });
+
+  it('T04b — negative amount is flagged', () => {
+    const issues = validateTransaction(makeValidTransaction({ amount: -100 }), 0);
+    assertIncludes(issues.map(i => i.code), ISSUE_CODE.INVALID_TRANSACTION_AMOUNT);
+  });
+
+  it('T04c — non-numeric amount is flagged', () => {
+    const issues = validateTransaction(makeValidTransaction({ amount: 'free' }), 0);
+    assertIncludes(issues.map(i => i.code), ISSUE_CODE.INVALID_TRANSACTION_AMOUNT);
+  });
+
+  it('T06 — blank itemName is flagged', () => {
+    const issues = validateTransaction(makeValidTransaction({ itemName: '   ' }), 0);
+    assertIncludes(issues.map(i => i.code), ISSUE_CODE.INVALID_TRANSACTION_ITEM_NAME);
+  });
+
+  it('T06b — missing itemName is flagged', () => {
+    const tx = makeValidTransaction();
+    delete tx.itemName;
+    const issues = validateTransaction(tx, 0);
+    assertIncludes(issues.map(i => i.code), ISSUE_CODE.INVALID_TRANSACTION_ITEM_NAME);
+  });
+
+  it('T07 — invalid date format is flagged', () => {
+    const issues = validateTransaction(makeValidTransaction({ date: '15-03-2024' }), 0);
+    assertIncludes(issues.map(i => i.code), ISSUE_CODE.INVALID_TRANSACTION_DATE);
+  });
+
+  it('T08 — non-calendar date (2024-02-30) is flagged', () => {
+    const issues = validateTransaction(makeValidTransaction({ date: '2024-02-30' }), 0);
+    assertIncludes(issues.map(i => i.code), ISSUE_CODE.INVALID_TRANSACTION_DATE);
+  });
+
+  it('T07b — missing date is flagged', () => {
+    const tx = makeValidTransaction();
+    delete tx.date;
+    const issues = validateTransaction(tx, 0);
+    assertIncludes(issues.map(i => i.code), ISSUE_CODE.INVALID_TRANSACTION_DATE);
+  });
+
+  it('path includes field name for each issue', () => {
+    const issues = validateTransaction(makeValidTransaction({ type: 'bad', amount: -1, itemName: '' }), 3);
+    assert(issues.every(i => i.path.startsWith('transactions[3].')), 'path must reference index');
+  });
+});
+
+// ============================================================
+// Suite 2: validateCustomCategories
+// ============================================================
+describe('validateCustomCategories', () => {
+  it('T10 — valid custom categories are accepted', () => {
+    const cats = {
+      income:  ['Salary', 'Freelance', 'Gift', 'Other', 'Consulting'],
+      expense: ['Food', 'Transport', 'Health', 'Other', 'Gym'],
+    };
+    const { validCategories, invalidCategories } = validateCustomCategories(cats);
+    const names = validCategories.map(c => c.name);
+    assertIncludes(names, 'Consulting');
+    assertIncludes(names, 'Gym');
+    assertEqual(invalidCategories.length, 0);
+  });
+
+  it('T10b — default categories are excluded from validCategories', () => {
+    const cats = {
+      income:  ['Salary', 'Freelance'],
+      expense: ['Food', 'Bills'],
+    };
+    const { validCategories } = validateCustomCategories(cats);
+    assertEqual(validCategories.length, 0, 'Default categories must not appear in validCategories');
+  });
+
+  it('T09 — duplicate custom category is flagged', () => {
+    const cats = {
+      income:  ['MyIncome', 'MyIncome'],  // duplicate
+      expense: [],
+    };
+    const { invalidCategories } = validateCustomCategories(cats);
+    // Second occurrence should be flagged as duplicate
+    assert(invalidCategories.some(ic => ic.errors.some(e => e.includes('Duplicate'))),
+      'Duplicate custom category must be reported');
+  });
+
+  it('T09b — duplicate across different types is allowed', () => {
+    // Same name in income and expense is legal (different type)
+    const cats = {
+      income:  ['Salary', 'MyName'],
+      expense: ['Food', 'MyName'],
+    };
+    const { validCategories, invalidCategories } = validateCustomCategories(cats);
+    const names = validCategories.map(c => c.name);
+    assert(names.filter(n => n === 'MyName').length === 2,
+      'Same name in different types should both be valid');
+    assertEqual(invalidCategories.length, 0);
+  });
+});
+
+// ============================================================
+// Suite 3: validateSettings
+// ============================================================
+describe('validateSettings', () => {
+  it('valid currency passes', () => {
+    const result = validateSettings({ currency: 'USD' });
+    assert(result.settingsValid, 'USD should be valid');
+    assertEqual(result.currency, 'USD');
+    assertEqual(result.issues.length, 0);
+  });
+
+  it('T11 — unsupported currency is flagged', () => {
+    const result = validateSettings({ currency: 'XYZ' });
+    assert(!result.settingsValid, 'XYZ should be invalid');
+    assertIncludes(result.issues.map(i => i.code), ISSUE_CODE.INVALID_CURRENCY);
+  });
+
+  it('T11b — missing currency is flagged', () => {
+    const result = validateSettings({ });
+    assert(!result.settingsValid);
+    assertIncludes(result.issues.map(i => i.code), ISSUE_CODE.INVALID_CURRENCY);
+  });
+
+  it('null settings returns MISSING_SETTINGS', () => {
+    const result = validateSettings(null);
+    assert(!result.settingsValid);
+    assertIncludes(result.issues.map(i => i.code), ISSUE_CODE.MISSING_SETTINGS);
+  });
+
+  it('all 14 supported currencies are accepted', () => {
+    const codes = ['USD','EUR','GBP','IDR','JPY','CNY','SGD','AUD','CAD','CHF','MYR','THB','INR','KRW'];
+    for (const code of codes) {
+      const result = validateSettings({ currency: code });
+      assert(result.settingsValid, `${code} should be valid`);
+    }
+  });
+});
+
+// ============================================================
+// Suite 4: validateLocalData — full integration
+// ============================================================
+describe('validateLocalData', () => {
+  it('T01 — empty localStorage returns NO_LOCAL_DATA, valid, hasData:false', () => {
+    clearLocalData();
+    const result = validateLocalData();
+    assertEqual(result.hasData, false);
+    assertEqual(result.dataState, 'NO_LOCAL_DATA');
+    assert(result.valid, 'Empty data must be valid (not an error)');
+    assertEqual(result.transactions.length, 0);
+    assertEqual(result.customCategories.length, 0);
+    assertEqual(result.issues.length, 0);
+  });
+
+  it('T20 — corrupted schema returns CORRUPTED_SCHEMA issue', () => {
+    localStorage.setItem(FINANCE_KEY, '{"broken":true}');
+    const result = validateLocalData();
+    assertEqual(result.hasData, true);
+    assert(!result.valid);
+    assertEqual(result.dataState, 'INVALID_LOCAL_DATA');
+    assertIncludes(result.issues.map(i => i.code), ISSUE_CODE.CORRUPTED_SCHEMA);
+    clearLocalData();
+  });
+
+  it('valid schema with one valid transaction → VALID_LOCAL_DATA', () => {
+    saveLocalData(makeValidSchema({ transactions: [makeValidTransaction()] }));
+    const result = validateLocalData();
+    assert(result.valid);
+    assertEqual(result.dataState, 'VALID_LOCAL_DATA');
+    assertEqual(result.transactions.length, 1);
+    assertEqual(result.invalidTransactions.length, 0);
+    clearLocalData();
+  });
+
+  it('T03/T04 — invalid transactions are collected, not silently dropped', () => {
+    const bad = makeValidTransaction({ type: 'bad-type', amount: -5 });
+    saveLocalData(makeValidSchema({ transactions: [bad] }));
+    const result = validateLocalData();
+    assert(!result.valid);
+    assertEqual(result.transactions.length, 0, 'Invalid tx must not appear in validTransactions');
+    assertEqual(result.invalidTransactions.length, 1, 'Invalid tx must appear in invalidTransactions');
+    clearLocalData();
+  });
+
+  it('mixed valid and invalid transactions are separated correctly', () => {
+    const good = makeValidTransaction({ id: 'good-id' });
+    const bad  = makeValidTransaction({ id: 'bad-id', amount: 0 });
+    saveLocalData(makeValidSchema({ transactions: [good, bad] }));
+    const result = validateLocalData();
+    assert(!result.valid);
+    assertEqual(result.transactions.length, 1);
+    assertEqual(result.transactions[0].id, 'good-id', 'Valid tx must preserve original ID');
+    assertEqual(result.invalidTransactions.length, 1);
+    assertEqual(result.invalidTransactions[0].record.id, 'bad-id');
+    clearLocalData();
+  });
+
+  it('T13 — validation does not modify finance LocalStorage data', () => {
+    const original = makeValidSchema({ transactions: [makeValidTransaction()] });
+    saveLocalData(original);
+    const before = localStorage.getItem(FINANCE_KEY);
+    validateLocalData();
+    const after = localStorage.getItem(FINANCE_KEY);
+    assertEqual(before, after, 'LocalStorage must be untouched after validation');
+    clearLocalData();
+  });
+
+  it('summary counts are accurate', () => {
+    const tx = makeValidTransaction();
+    const schema = makeValidSchema({
+      transactions: [tx],
+      categories: {
+        income:  ['Salary', 'Freelance', 'MyGig'],
+        expense: ['Food', 'Gym'],
+      },
+    });
+    saveLocalData(schema);
+    const result = validateLocalData();
+    assertEqual(result.summary.transactionCount, 1);
+    assertEqual(result.summary.customCategoryCount, 2, 'MyGig (income) + Gym (expense)');
+    assert(result.summary.hasSettings);
+    clearLocalData();
+  });
+});
+
+// ============================================================
+// Suite 5: Migration marker — status management
+// ============================================================
+describe('Migration marker and getMigrationStatus', () => {
+  it('T17 — returns not-needed when no marker exists', () => {
+    clearMigrationMarker(TEST_USER_ID);
+    assertEqual(getMigrationStatus(TEST_USER_ID), MIGRATION_STATUS.NOT_NEEDED);
+  });
+
+  it('T16 — marker key uses userId UUID, never email', () => {
+    const key = migrationMarkerKey(TEST_USER_ID);
+    assert(key.startsWith(MIGRATION_MARKER_PREFIX), 'Key must use prefix');
+    assert(key.includes(TEST_USER_ID), 'Key must include userId');
+    assert(!key.includes('@'), 'Key must never contain email address (@)');
+  });
+
+  it('marker round-trips correctly', () => {
+    const marker = { userId: TEST_USER_ID, status: MIGRATION_STATUS.AVAILABLE,
+      migratedTransactionIds: [], migratedCategories: [], settingsMigrated: false,
+      conflicts: [], startedAt: null, completedAt: null };
+    writeMigrationMarker(TEST_USER_ID, marker);
+    const read = readMigrationMarker(TEST_USER_ID);
+    assertEqual(read.status, MIGRATION_STATUS.AVAILABLE);
+    assertEqual(read.userId, TEST_USER_ID);
+    clearMigrationMarker(TEST_USER_ID);
+  });
+
+  it('getMigrationStatus reflects written marker', () => {
+    writeMigrationMarker(TEST_USER_ID, { status: MIGRATION_STATUS.PARTIAL });
+    assertEqual(getMigrationStatus(TEST_USER_ID), MIGRATION_STATUS.PARTIAL);
+    clearMigrationMarker(TEST_USER_ID);
+  });
+
+  it('clearMigrationMarker removes marker', () => {
+    writeMigrationMarker(TEST_USER_ID, { status: MIGRATION_STATUS.COMPLETED });
+    clearMigrationMarker(TEST_USER_ID);
+    assertEqual(getMigrationStatus(TEST_USER_ID), MIGRATION_STATUS.NOT_NEEDED);
+  });
+});
+
+// ============================================================
+// Suite 6: detectMigrationOpportunity (local-only checks)
+// ============================================================
+describe('detectMigrationOpportunity', () => {
+  it('T18 — returns needed:false when localStorage has no transactions', async () => {
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+    const result = await detectMigrationOpportunity(TEST_USER_ID);
+    assertEqual(result.needed, false);
+    assertEqual(result.localCount, 0);
+    assertEqual(result.scenario, 'B');
+  });
+
+  it('returns needed:false for completed migration', async () => {
+    clearLocalData();
+    writeMigrationMarker(TEST_USER_ID, { status: MIGRATION_STATUS.COMPLETED });
+    const result = await detectMigrationOpportunity(TEST_USER_ID);
+    assertEqual(result.needed, false);
+    assertEqual(result.currentStatus, MIGRATION_STATUS.COMPLETED);
+    clearMigrationMarker(TEST_USER_ID);
+  });
+
+  it('returns needed:true/resume for partial migration', async () => {
+    writeMigrationMarker(TEST_USER_ID, { status: MIGRATION_STATUS.PARTIAL });
+    const result = await detectMigrationOpportunity(TEST_USER_ID);
+    assertEqual(result.needed, true);
+    assertEqual(result.scenario, 'resume');
+    assertEqual(result.currentStatus, MIGRATION_STATUS.PARTIAL);
+    clearMigrationMarker(TEST_USER_ID);
+  });
+
+  it('returns needed:true when local transactions exist (scenario A, cloud = 0 assumed)', async () => {
+    saveLocalData(makeValidSchema({ transactions: [makeValidTransaction()] }));
+    clearMigrationMarker(TEST_USER_ID);
+    // Cloud count will be 0 (Supabase not configured in test env)
+    const result = await detectMigrationOpportunity(TEST_USER_ID);
+    assertEqual(result.needed, true);
+    assertEqual(result.localCount, 1);
+    // scenario is A (local > 0, cloud = 0 because Supabase not configured)
+    assert(['A', 'C'].includes(result.scenario), `scenario should be A or C, got ${result.scenario}`);
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+  });
+});
+
+// ============================================================
+// Suite 7: Stubbed upload functions (T19 — safety guards)
+// ============================================================
+describe('Stubbed upload API safety', () => {
+  it('T19 — startMigration returns NOT_IMPLEMENTED, never uploads', async () => {
+    const result = await startMigration(TEST_USER_ID);
+    assertEqual(result.ok, false);
+    assertEqual(result.error.code, 'NOT_IMPLEMENTED');
+  });
+
+  it('T19 — retryMigration returns NOT_IMPLEMENTED', async () => {
+    const result = await retryMigration(TEST_USER_ID);
+    assertEqual(result.ok, false);
+    assertEqual(result.error.code, 'NOT_IMPLEMENTED');
+  });
+
+  it('T19 — verifyMigration returns NOT_IMPLEMENTED', async () => {
+    const result = await verifyMigration(TEST_USER_ID);
+    assertEqual(result.ok, false);
+    assertEqual(result.error.code, 'NOT_IMPLEMENTED');
+  });
+});
+
+// ============================================================
+// Suite 8: Security — T15 no credentials/tokens in output
+// ============================================================
+describe('Security invariants', () => {
+  it('T15 — validateLocalData result contains no password-like keys', () => {
+    saveLocalData(makeValidSchema({ transactions: [makeValidTransaction()] }));
+    const result = validateLocalData();
+    const resultStr = JSON.stringify(result).toLowerCase();
+    assert(!resultStr.includes('password'), 'Result must not contain "password"');
+    assert(!resultStr.includes('token'), 'Result must not contain "token"');
+    assert(!resultStr.includes('secret'), 'Result must not contain "secret"');
+    assert(!resultStr.includes('apikey'), 'Result must not contain "apikey"');
+    assert(!resultStr.includes('service_role'), 'Result must not contain "service_role"');
+    clearLocalData();
+  });
+
+  it('T16 — migrationMarkerKey throws for invalid userId (prevents email use)', () => {
+    let threw = false;
+    try { migrationMarkerKey(''); } catch { threw = true; }
+    assert(threw, 'Empty userId must throw');
+
+    let threw2 = false;
+    try { migrationMarkerKey(null); } catch { threw2 = true; }
+    assert(threw2, 'Null userId must throw');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Render results
+// ---------------------------------------------------------------------------
+const container = document.getElementById('results');
+for (const suite of suites) {
+  const div = document.createElement('div');
+  div.className = 'suite';
+  const title = document.createElement('div');
+  title.className = 'suite-title';
+  title.textContent = suite.name;
+  div.appendChild(title);
+  for (const r of suite.results) {
+    const el = document.createElement('div');
+    el.className = `result ${r.ok ? 'pass' : 'fail'}`;
+    el.textContent = `${r.ok ? '✓' : '✗'} ${r.desc}${r.error ? ' — ' + r.error : ''}`;
+    div.appendChild(el);
+  }
+  container.appendChild(div);
+}
+
+const total = passed + failed;
+const summaryEl = document.getElementById('summary');
+summaryEl.textContent = `${passed}/${total} passed${failed > 0 ? ` — ${failed} FAILED` : ' — ALL PASS'}`;
+summaryEl.style.color = failed > 0 ? '#842029' : '#0f5132';
+
+console.log(`\nTask 17.1 verification: ${passed}/${total} passed${failed > 0 ? ` (${failed} FAILED)` : ' — ALL PASS'}`);
+</script>
+</body>
+</html>

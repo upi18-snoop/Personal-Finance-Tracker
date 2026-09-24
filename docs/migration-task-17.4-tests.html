@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task 17.4 — Transaction Migration Tests</title>
+  <style>
+    body { font-family: monospace; padding: 1.5rem; background: #f8f9fa; color: #212529; }
+    h1 { font-size: 1.1rem; margin-bottom: 1rem; }
+    .suite { margin-bottom: 1.5rem; }
+    .suite-title { font-weight: bold; margin-bottom: .4rem; font-size: .95rem; color: #495057; }
+    .result { padding: .2rem .4rem; margin: .15rem 0; font-size: .85rem; border-radius: 3px; }
+    .pass { background: #d1e7dd; color: #0f5132; }
+    .fail { background: #f8d7da; color: #842029; }
+    #summary { margin-top: 1.5rem; font-weight: bold; font-size: 1rem; }
+    pre { background: #fff; border: 1px solid #dee2e6; padding: .5rem; font-size: .75rem; overflow: auto; }
+    .note { font-size: .8rem; color: #6c757d; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+<h1>Task 17.4 — Transaction Migration (Idempotent Upload) Tests</h1>
+<p class="note">
+  Tests verify <code>startMigration</code> and <code>retryMigration</code> in <code>js/migration.js</code>.
+  <strong>SupabaseDatabaseProvider is monkey-patched</strong> — no live Supabase connection required.
+  Open the browser console for detailed output.
+</p>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script type="module">
+/*
+ * Task 17.4 test harness.
+ *
+ * Strategy: import migration.js functions, then monkey-patch SupabaseDatabaseProvider
+ * inside the supabase-storage module by swapping the class on the module's live
+ * export before each test group. Because ES modules are live bindings we cannot
+ * directly reassign the import in migration.js. Instead we intercept at the
+ * SupabaseDatabaseProvider constructor level by replacing the prototype methods
+ * on the real class — the module already imported it, so prototype patching
+ * affects the instance that migration.js creates.
+ *
+ * Tests covered:
+ *  T01  No userId → no write, structured error returned
+ *  T02  Invalid local data (bad transaction) → no write, validation errors returned
+ *  T03  No local data (hasData: false) → ok: true, migratedCount: 0
+ *  T04  Single valid transaction → migrated (mock ok: true)
+ *  T05  Multiple transactions → all processed
+ *  T06  Original transaction ID preserved (tx.id used, not regenerated)
+ *  T07  Correct userId passed to addTransaction (not email)
+ *  T08  Duplicate error → alreadyExistsCount++, NOT in failed[]
+ *  T09  Idempotency: second run → all alreadyExistsCount
+ *  T10  Non-network per-tx error → failedCount++, remaining transactions continue
+ *  T11  Network error → PARTIAL status, remaining transactions not processed
+ *  T12  financeTrackerData localStorage unchanged after migration
+ *  T13  Amount unchanged (no conversion)
+ *  T14  Type unchanged
+ *  T15  Date unchanged
+ *  T16  No default categories created by startMigration
+ *  T17  retryMigration with PARTIAL status → calls startMigration
+ *  T18  retryMigration with non-PARTIAL status → structured error returned
+ */
+
+import {
+  MIGRATION_STATUS,
+  MIGRATION_MARKER_PREFIX,
+  ISSUE_CODE,
+  migrationMarkerKey,
+  readMigrationMarker,
+  writeMigrationMarker,
+  clearMigrationMarker,
+  getMigrationStatus,
+  startMigration,
+  retryMigration,
+} from '../js/migration.js';
+
+import { SupabaseDatabaseProvider } from '../js/supabase-storage.js';
+
+// ---------------------------------------------------------------------------
+// Minimal test runner (same pattern as migration-task-17.1-tests.html)
+// ---------------------------------------------------------------------------
+
+let passed = 0;
+let failed = 0;
+const suites = [];
+let currentSuite = null;
+
+function describe(name, fn) {
+  currentSuite = { name, results: [] };
+  suites.push(currentSuite);
+  fn();
+}
+
+async function it(desc, fn) {
+  try {
+    await fn();
+    currentSuite.results.push({ ok: true, desc });
+    passed++;
+    console.log(`  ✓ ${desc}`);
+  } catch (err) {
+    currentSuite.results.push({ ok: false, desc, error: err.message });
+    failed++;
+    console.error(`  ✗ ${desc}`, err.message, err);
+  }
+}
+
+function assert(condition, msg) {
+  if (!condition) throw new Error(msg || 'Assertion failed');
+}
+function assertEqual(a, b, msg) {
+  if (a !== b) throw new Error(msg || `Expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+}
+function assertIncludes(arr, val, msg) {
+  if (!arr.includes(val)) throw new Error(msg || `Expected array to include ${JSON.stringify(val)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const FINANCE_KEY = 'financeTrackerData';
+const TEST_USER_ID = '00000000-0000-0000-0000-test174user01';
+
+function makeValidSchema(overrides = {}) {
+  return {
+    version: 1,
+    transactions: overrides.transactions ?? [],
+    categories: overrides.categories ?? {
+      income:  ['Salary', 'Freelance', 'Business', 'Investment', 'Gift', 'Other'],
+      expense: ['Food', 'Transport', 'Fun', 'Bills', 'Shopping', 'Health', 'Other'],
+    },
+    settings: overrides.settings ?? { currency: 'IDR' },
+  };
+}
+
+function makeValidTransaction(overrides = {}) {
+  return {
+    id:        overrides.id        ?? 'tx-aabbcc-001',
+    type:      overrides.type      ?? 'expense',
+    itemName:  overrides.itemName  ?? 'Coffee',
+    amount:    overrides.amount    ?? 15000,
+    category:  overrides.category  ?? 'Food',
+    date:      overrides.date      ?? '2024-03-15',
+    createdAt: overrides.createdAt ?? '2024-03-15T08:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function saveLocalData(obj) {
+  localStorage.setItem(FINANCE_KEY, JSON.stringify(obj));
+}
+
+function clearLocalData() {
+  localStorage.removeItem(FINANCE_KEY);
+}
+
+function snapshotFinanceKey() {
+  return localStorage.getItem(FINANCE_KEY);
+}
+
+// ---------------------------------------------------------------------------
+// SupabaseDatabaseProvider mock helpers
+//
+// We patch prototype methods on the live SupabaseDatabaseProvider class.
+// migration.js does `new SupabaseDatabaseProvider()` then calls instance methods,
+// so prototype patches are seen by those instances.
+// ---------------------------------------------------------------------------
+
+let _originalAddTransaction = null;
+let _originalGetTransactions = null;
+
+function saveOriginals() {
+  _originalAddTransaction  = SupabaseDatabaseProvider.prototype.addTransaction;
+  _originalGetTransactions = SupabaseDatabaseProvider.prototype.getTransactions;
+}
+
+function restoreOriginals() {
+  if (_originalAddTransaction)  SupabaseDatabaseProvider.prototype.addTransaction  = _originalAddTransaction;
+  if (_originalGetTransactions) SupabaseDatabaseProvider.prototype.getTransactions = _originalGetTransactions;
+}
+
+function mockAddTransaction(fn) {
+  SupabaseDatabaseProvider.prototype.addTransaction = fn;
+}
+
+function mockGetTransactions(fn) {
+  SupabaseDatabaseProvider.prototype.getTransactions = fn;
+}
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
+
+saveOriginals();
+clearLocalData();
+clearMigrationMarker(TEST_USER_ID);
+
+// ---------------------------------------------------------------------------
+// Suite 1: Precondition failures — no writes occur
+// ---------------------------------------------------------------------------
+describe('Precondition failures', () => {
+  it('T01 — no userId → returns ok:false with INVALID_USER_ID error', async () => {
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    // Track if addTransaction is ever called
+    let writeCalled = false;
+    mockAddTransaction(async () => { writeCalled = true; return { ok: true, transaction: {} }; });
+
+    const result = await startMigration(null);
+
+    restoreOriginals();
+    assert(!result.ok, 'ok must be false');
+    assertEqual(writeCalled, false, 'addTransaction must not be called without userId');
+    assert(result.errors.some(e => e.code === 'INVALID_USER_ID'), 'Must return INVALID_USER_ID error');
+  });
+
+  it('T01b — empty string userId → returns ok:false', async () => {
+    const result = await startMigration('');
+    assert(!result.ok, 'ok must be false for empty userId');
+    assert(result.errors.some(e => e.code === 'INVALID_USER_ID'));
+  });
+
+  it('T02 — invalid local data → no write, validation errors returned', async () => {
+    // Store a transaction with invalid type and amount
+    const badTx = makeValidTransaction({ type: 'invalid-type', amount: -999 });
+    saveLocalData(makeValidSchema({ transactions: [badTx] }));
+
+    let writeCalled = false;
+    mockAddTransaction(async () => { writeCalled = true; return { ok: true, transaction: {} }; });
+
+    const result = await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(!result.ok, 'ok must be false for invalid data');
+    assertEqual(writeCalled, false, 'addTransaction must not be called for invalid data');
+    assert(result.errors.length > 0, 'Must return validation errors');
+  });
+
+  it('T03 — no local data → ok:true, migratedCount:0', async () => {
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    let writeCalled = false;
+    mockAddTransaction(async () => { writeCalled = true; return { ok: true, transaction: {} }; });
+
+    const result = await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+
+    assert(result.ok, 'ok must be true (nothing to do is not an error)');
+    assertEqual(result.migratedCount, 0);
+    assertEqual(writeCalled, false, 'addTransaction must not be called when hasData is false');
+    assertEqual(result.status, MIGRATION_STATUS.NOT_NEEDED);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 2: Successful migration
+// ---------------------------------------------------------------------------
+describe('Successful migration', () => {
+  it('T04 — single valid transaction → migratedCount:1, ok:true', async () => {
+    const tx = makeValidTransaction({ id: 'tx-single-001' });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    mockAddTransaction(async (_userId, _tx) => ({ ok: true, transaction: _tx }));
+
+    const result = await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(result.ok, `ok must be true; errors: ${JSON.stringify(result.errors)}`);
+    assertEqual(result.migratedCount, 1);
+    assertEqual(result.alreadyExistsCount, 0);
+    assertEqual(result.failedCount, 0);
+    assertIncludes(result.migratedIds, 'tx-single-001');
+  });
+
+  it('T05 — multiple transactions → all processed', async () => {
+    const txs = [
+      makeValidTransaction({ id: 'tx-multi-001', itemName: 'Coffee' }),
+      makeValidTransaction({ id: 'tx-multi-002', itemName: 'Lunch' }),
+      makeValidTransaction({ id: 'tx-multi-003', itemName: 'Transport', type: 'expense', category: 'Transport' }),
+    ];
+    saveLocalData(makeValidSchema({ transactions: txs }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    mockAddTransaction(async (_userId, _tx) => ({ ok: true, transaction: _tx }));
+
+    const result = await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(result.ok);
+    assertEqual(result.migratedCount, 3);
+    assertEqual(result.migratedIds.length, 3);
+  });
+
+  it('T06 — original transaction ID preserved (tx.id used, not regenerated)', async () => {
+    const stableId = 'stable-uuid-should-not-change';
+    const tx = makeValidTransaction({ id: stableId });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    const capturedTx = [];
+    mockAddTransaction(async (_userId, t) => {
+      capturedTx.push(t);
+      return { ok: true, transaction: t };
+    });
+
+    await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assertEqual(capturedTx.length, 1, 'Should have called addTransaction once');
+    assertEqual(capturedTx[0].id, stableId, 'ID must not be regenerated');
+  });
+
+  it('T07 — correct userId passed to addTransaction (not email)', async () => {
+    const tx = makeValidTransaction({ id: 'tx-userid-check' });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    const capturedUserIds = [];
+    mockAddTransaction(async (uid, t) => {
+      capturedUserIds.push(uid);
+      return { ok: true, transaction: t };
+    });
+
+    await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assertEqual(capturedUserIds.length, 1, 'addTransaction must be called exactly once');
+    assertEqual(capturedUserIds[0], TEST_USER_ID, 'Must pass userId UUID, not email');
+    assert(!capturedUserIds[0].includes('@'), 'userId must not be an email address');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 3: Idempotency — duplicate handling
+// ---------------------------------------------------------------------------
+describe('Idempotency and duplicate handling', () => {
+  it('T08 — duplicate error → alreadyExistsCount++, not in failed[]', async () => {
+    const tx = makeValidTransaction({ id: 'tx-dup-001' });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    // Simulate cloud already has this transaction
+    mockAddTransaction(async () => ({
+      ok: false,
+      error: { code: 'duplicate', message: 'A record with that name already exists.' },
+    }));
+
+    const result = await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(result.ok, 'ok must be true even when duplicates found');
+    assertEqual(result.alreadyExistsCount, 1, 'alreadyExistsCount must be 1');
+    assertEqual(result.failedCount, 0, 'failed count must be 0 for duplicates');
+    assertEqual(result.failed.length, 0, 'failed[] must be empty for duplicates');
+    assertIncludes(result.existingIds, 'tx-dup-001', 'ID must be in existingIds');
+    assertEqual(result.migratedCount, 0, 'migratedCount must be 0 for pure duplicate run');
+  });
+
+  it('T09 — idempotency: second run returns alreadyExistsCount for first run\'s migrated IDs', async () => {
+    const txs = [
+      makeValidTransaction({ id: 'tx-idm-001' }),
+      makeValidTransaction({ id: 'tx-idm-002' }),
+    ];
+    saveLocalData(makeValidSchema({ transactions: txs }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    // First run: all succeed
+    mockAddTransaction(async (_u, t) => ({ ok: true, transaction: t }));
+    const run1 = await startMigration(TEST_USER_ID);
+    restoreOriginals();
+
+    assertEqual(run1.migratedCount, 2, 'First run should migrate 2');
+
+    // Second run: all already exist
+    mockAddTransaction(async () => ({
+      ok: false,
+      error: { code: 'duplicate', message: 'Duplicate.' },
+    }));
+    const run2 = await startMigration(TEST_USER_ID);
+    restoreOriginals();
+
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(run2.ok, 'Second run must still return ok:true');
+    assertEqual(run2.alreadyExistsCount, 2, 'Second run: both IDs already in cloud');
+    assertEqual(run2.migratedCount, 0, 'Second run: nothing new to migrate');
+    assertEqual(run2.failed.length, 0, 'Second run: nothing should fail');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 4: Error handling
+// ---------------------------------------------------------------------------
+describe('Error handling', () => {
+  it('T10 — non-network per-tx error → failedCount++, remaining transactions continue', async () => {
+    const txs = [
+      makeValidTransaction({ id: 'tx-err-001' }),
+      makeValidTransaction({ id: 'tx-err-002' }),
+      makeValidTransaction({ id: 'tx-err-003' }),
+    ];
+    saveLocalData(makeValidSchema({ transactions: txs }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    // Second tx fails with an unknown error; others succeed
+    mockAddTransaction(async (_u, t) => {
+      if (t.id === 'tx-err-002') {
+        return { ok: false, error: { code: 'unknown', message: 'Some unknown error.' } };
+      }
+      return { ok: true, transaction: t };
+    });
+
+    const result = await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(result.ok, 'ok must still be true (partial success)');
+    assertEqual(result.migratedCount, 2, 'Two transactions must migrate successfully');
+    assertEqual(result.failedCount, 1, 'One transaction must fail');
+    assertEqual(result.failed.length, 1);
+    assertEqual(result.failed[0].id, 'tx-err-002');
+    // Remaining transactions after the failure continue (not a network stop)
+    assertIncludes(result.migratedIds, 'tx-err-001');
+    assertIncludes(result.migratedIds, 'tx-err-003');
+  });
+
+  it('T11 — network error → PARTIAL status, remaining transactions not processed', async () => {
+    const txs = [
+      makeValidTransaction({ id: 'tx-net-001' }),
+      makeValidTransaction({ id: 'tx-net-002' }),
+      makeValidTransaction({ id: 'tx-net-003' }),
+    ];
+    saveLocalData(makeValidSchema({ transactions: txs }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    // First tx succeeds, second gets network-error, third should NOT be processed
+    let callCount = 0;
+    mockAddTransaction(async (_u, t) => {
+      callCount++;
+      if (t.id === 'tx-net-002') {
+        return { ok: false, error: { code: 'network-error', message: 'A network error occurred.' } };
+      }
+      return { ok: true, transaction: t };
+    });
+
+    const result = await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assertEqual(result.status, MIGRATION_STATUS.PARTIAL, 'Status must be PARTIAL on network error');
+    assertEqual(result.failedCount, 1, 'Network-error tx must be in failed');
+    assertEqual(callCount, 2, 'Third transaction must not be processed after network stop');
+    assertIncludes(result.migratedIds, 'tx-net-001', 'First tx was migrated before network error');
+    assert(!result.migratedIds.includes('tx-net-003'), 'Third tx must not be processed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 5: Data integrity invariants
+// ---------------------------------------------------------------------------
+describe('Data integrity invariants', () => {
+  it('T12 — financeTrackerData localStorage unchanged after migration', async () => {
+    const tx = makeValidTransaction({ id: 'tx-integrity-001' });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    const snapshotBefore = snapshotFinanceKey();
+
+    mockAddTransaction(async (_u, t) => ({ ok: true, transaction: t }));
+    await startMigration(TEST_USER_ID);
+    restoreOriginals();
+
+    const snapshotAfter = snapshotFinanceKey();
+
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assertEqual(snapshotBefore, snapshotAfter,
+      'financeTrackerData must be byte-for-byte identical after migration');
+  });
+
+  it('T13 — amount unchanged (no conversion)', async () => {
+    const tx = makeValidTransaction({ id: 'tx-amount-001', amount: 1234567 });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    const capturedAmounts = [];
+    mockAddTransaction(async (_u, t) => {
+      capturedAmounts.push(t.amount);
+      return { ok: true, transaction: t };
+    });
+
+    await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assertEqual(capturedAmounts[0], 1234567, 'Amount must not be converted or modified');
+  });
+
+  it('T14 — type unchanged', async () => {
+    const tx = makeValidTransaction({ id: 'tx-type-001', type: 'income' });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    const capturedTypes = [];
+    mockAddTransaction(async (_u, t) => {
+      capturedTypes.push(t.type);
+      return { ok: true, transaction: t };
+    });
+
+    await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assertEqual(capturedTypes[0], 'income', 'Type must not be modified');
+  });
+
+  it('T15 — date unchanged', async () => {
+    const tx = makeValidTransaction({ id: 'tx-date-001', date: '2023-07-04' });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    const capturedDates = [];
+    mockAddTransaction(async (_u, t) => {
+      capturedDates.push(t.date);
+      return { ok: true, transaction: t };
+    });
+
+    await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assertEqual(capturedDates[0], '2023-07-04', 'Date must not be modified');
+  });
+
+  it('T16 — no default category records created by startMigration', async () => {
+    const tx = makeValidTransaction({ id: 'tx-cat-001', category: 'Food' });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    // Track any addCustomCategory calls
+    const origAddCat = SupabaseDatabaseProvider.prototype.addCustomCategory;
+    let addCatCalled = false;
+    SupabaseDatabaseProvider.prototype.addCustomCategory = async () => {
+      addCatCalled = true;
+      return { ok: true };
+    };
+
+    mockAddTransaction(async (_u, t) => ({ ok: true, transaction: t }));
+    await startMigration(TEST_USER_ID);
+
+    SupabaseDatabaseProvider.prototype.addCustomCategory = origAddCat;
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assertEqual(addCatCalled, false, 'startMigration must not call addCustomCategory');
+  });
+
+  it('migration marker stores migratedTransactionIds after successful run', async () => {
+    const txs = [
+      makeValidTransaction({ id: 'tx-marker-001' }),
+      makeValidTransaction({ id: 'tx-marker-002' }),
+    ];
+    saveLocalData(makeValidSchema({ transactions: txs }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    mockAddTransaction(async (_u, t) => ({ ok: true, transaction: t }));
+    await startMigration(TEST_USER_ID);
+    restoreOriginals();
+
+    const marker = readMigrationMarker(TEST_USER_ID);
+
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(marker !== null, 'Migration marker must exist after run');
+    assertIncludes(marker.migratedTransactionIds, 'tx-marker-001');
+    assertIncludes(marker.migratedTransactionIds, 'tx-marker-002');
+  });
+
+  it('status never set to COMPLETED by startMigration', async () => {
+    const tx = makeValidTransaction({ id: 'tx-nocomplete-001' });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    mockAddTransaction(async (_u, t) => ({ ok: true, transaction: t }));
+    const result = await startMigration(TEST_USER_ID);
+    restoreOriginals();
+
+    const marker = readMigrationMarker(TEST_USER_ID);
+
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(result.status !== MIGRATION_STATUS.COMPLETED, 'startMigration must not set COMPLETED');
+    assert(marker.status !== MIGRATION_STATUS.COMPLETED, 'Marker must not be COMPLETED after startMigration');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 6: retryMigration
+// ---------------------------------------------------------------------------
+describe('retryMigration', () => {
+  it('T17 — PARTIAL status → re-runs startMigration (calls addTransaction)', async () => {
+    const tx = makeValidTransaction({ id: 'tx-retry-001' });
+    saveLocalData(makeValidSchema({ transactions: [tx] }));
+
+    // Set up PARTIAL marker
+    writeMigrationMarker(TEST_USER_ID, {
+      userId:                 TEST_USER_ID,
+      status:                 MIGRATION_STATUS.PARTIAL,
+      migratedTransactionIds: [],
+      migratedCategories:     [],
+      settingsMigrated:       false,
+      conflicts:              [],
+      startedAt:              new Date().toISOString(),
+      completedAt:            null,
+    });
+
+    let addTxCallCount = 0;
+    mockAddTransaction(async (_u, t) => {
+      addTxCallCount++;
+      return { ok: true, transaction: t };
+    });
+
+    const result = await retryMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(result.ok, `retryMigration must return ok:true; errors: ${JSON.stringify(result.errors)}`);
+    assert(addTxCallCount > 0, 'addTransaction must be called during retry');
+    assertEqual(result.migratedCount, 1, 'Retry must migrate the transaction');
+  });
+
+  it('T17b — PARTIAL status retry: previously migrated IDs end up as alreadyExistsCount', async () => {
+    const tx1 = makeValidTransaction({ id: 'tx-retry2-001' });
+    const tx2 = makeValidTransaction({ id: 'tx-retry2-002' });
+    saveLocalData(makeValidSchema({ transactions: [tx1, tx2] }));
+
+    // Simulate tx1 was already migrated in a previous run
+    writeMigrationMarker(TEST_USER_ID, {
+      userId:                 TEST_USER_ID,
+      status:                 MIGRATION_STATUS.PARTIAL,
+      migratedTransactionIds: ['tx-retry2-001'],
+      migratedCategories:     [],
+      settingsMigrated:       false,
+      conflicts:              [],
+      startedAt:              new Date().toISOString(),
+      completedAt:            null,
+    });
+
+    // Cloud has tx1 (so addTransaction for tx1 → duplicate), tx2 is new
+    mockAddTransaction(async (_u, t) => {
+      if (t.id === 'tx-retry2-001') {
+        return { ok: false, error: { code: 'duplicate', message: 'Already exists.' } };
+      }
+      return { ok: true, transaction: t };
+    });
+
+    const result = await retryMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(result.ok);
+    assertEqual(result.migratedCount, 1, 'Only tx2 is newly migrated');
+    assertEqual(result.alreadyExistsCount, 1, 'tx1 is already in cloud');
+  });
+
+  it('T18 — non-PARTIAL status → structured error, no writes', async () => {
+    clearMigrationMarker(TEST_USER_ID);
+    clearLocalData();
+
+    // Status will be NOT_NEEDED (no marker, no local data)
+    let addTxCalled = false;
+    mockAddTransaction(async () => { addTxCalled = true; return { ok: true, transaction: {} }; });
+
+    const result = await retryMigration(TEST_USER_ID);
+
+    restoreOriginals();
+
+    assert(!result.ok, 'retryMigration must return ok:false for non-PARTIAL status');
+    assert(result.errors.some(e => e.code === 'INVALID_STATUS_FOR_RETRY'),
+      'Must return INVALID_STATUS_FOR_RETRY error');
+    assertEqual(addTxCalled, false, 'addTransaction must not be called');
+  });
+
+  it('T18b — COMPLETED status → structured error', async () => {
+    writeMigrationMarker(TEST_USER_ID, { status: MIGRATION_STATUS.COMPLETED });
+
+    let addTxCalled = false;
+    mockAddTransaction(async () => { addTxCalled = true; return { ok: true, transaction: {} }; });
+
+    const result = await retryMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(!result.ok, 'Must return ok:false for COMPLETED status');
+    assert(result.errors.some(e => e.code === 'INVALID_STATUS_FOR_RETRY'),
+      'Must return INVALID_STATUS_FOR_RETRY for COMPLETED status');
+    assertEqual(addTxCalled, false, 'No writes for COMPLETED status');
+  });
+
+  it('T18c — IN_PROGRESS status → structured error', async () => {
+    writeMigrationMarker(TEST_USER_ID, { status: MIGRATION_STATUS.IN_PROGRESS });
+
+    const result = await retryMigration(TEST_USER_ID);
+
+    clearMigrationMarker(TEST_USER_ID);
+
+    assert(!result.ok);
+    assert(result.errors.some(e => e.code === 'INVALID_STATUS_FOR_RETRY'));
+  });
+
+  it('T01-retry — no userId → structured error', async () => {
+    const result = await retryMigration(null);
+    assert(!result.ok);
+    assert(result.errors.some(e => e.code === 'INVALID_USER_ID'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 7: Mixed valid and invalid transactions
+// ---------------------------------------------------------------------------
+describe('Mixed valid and invalid transactions', () => {
+  it('valid + invalid mix: only valid ones uploaded; skippedCount reflects invalid', async () => {
+    const good = makeValidTransaction({ id: 'tx-mix-good' });
+    const bad  = makeValidTransaction({ id: 'tx-mix-bad', amount: -100 });
+    saveLocalData(makeValidSchema({ transactions: [good, bad] }));
+    clearMigrationMarker(TEST_USER_ID);
+
+    // If valid = false (bad transaction makes the whole set invalid), startMigration
+    // returns ok:false. validateLocalData returns valid:false when any transaction is invalid.
+    const result = await startMigration(TEST_USER_ID);
+
+    restoreOriginals();
+    clearLocalData();
+    clearMigrationMarker(TEST_USER_ID);
+
+    // When any transaction is invalid, validateLocalData() returns valid: false,
+    // so startMigration must not upload anything.
+    assert(!result.ok, 'Must not migrate when local data is invalid');
+    assert(result.errors.length > 0, 'Must report validation errors');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Render results
+// ---------------------------------------------------------------------------
+const container = document.getElementById('results');
+for (const suite of suites) {
+  const div = document.createElement('div');
+  div.className = 'suite';
+  const title = document.createElement('div');
+  title.className = 'suite-title';
+  title.textContent = suite.name;
+  div.appendChild(title);
+  for (const r of suite.results) {
+    const el = document.createElement('div');
+    el.className = `result ${r.ok ? 'pass' : 'fail'}`;
+    el.textContent = `${r.ok ? '✓' : '✗'} ${r.desc}${r.error ? ' — ' + r.error : ''}`;
+    div.appendChild(el);
+  }
+  container.appendChild(div);
+}
+
+const total = passed + failed;
+const summaryEl = document.getElementById('summary');
+summaryEl.textContent = `${passed}/${total} passed${failed > 0 ? ` — ${failed} FAILED` : ' — ALL PASS'}`;
+summaryEl.style.color = failed > 0 ? '#842029' : '#0f5132';
+
+console.log(`\nTask 17.4 verification: ${passed}/${total} passed${failed > 0 ? ` (${failed} FAILED)` : ' — ALL PASS'}`);
+</script>
+</body>
+</html>

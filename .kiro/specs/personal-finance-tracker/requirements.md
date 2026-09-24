@@ -1,4 +1,4 @@
-# Requirements Document
+ï»¿# Requirements Document
 
 ## Introduction
 
@@ -297,21 +297,21 @@ The App uses a configurable single-currency model. The user selects one currency
 
 ---
 
-## Phase 15 — Authentication Extension
+## Phase 15 ï¿½ Authentication Extension
 
-> **Scope note:** Requirements 1–18 above describe the original v1 client-side-only scope
-> (LocalStorage, no authentication, no cloud database). Requirements 19–22 below are the
+> **Scope note:** Requirements 1ï¿½18 above describe the original v1 client-side-only scope
+> (LocalStorage, no authentication, no cloud database). Requirements 19ï¿½22 below are the
 > explicitly approved Phase 15+ extension: optional user authentication via Supabase. The
 > extended roadmap is:
 >
-> - **Phase 15 — Authentication** (Supabase Auth, email/password flows)
-> - **Phase 16 — Cloud Database** (Supabase PostgreSQL, per-user data)
-> - **Phase 17 — LocalStorage ? Cloud Migration** (controlled data migration)
-> - **Phase 18 — Security / Session Hardening**
+> - **Phase 15 ï¿½ Authentication** (Supabase Auth, email/password flows)
+> - **Phase 16 ï¿½ Cloud Database** (Supabase PostgreSQL, per-user data)
+> - **Phase 17 ï¿½ LocalStorage ? Cloud Migration** (controlled data migration)
+> - **Phase 18 ï¿½ Security / Session Hardening**
 >
-> Phase 15 is additive. All Phase 1–14 functionality remains in place and unchanged.
+> Phase 15 is additive. All Phase 1ï¿½14 functionality remains in place and unchanged.
 
-### Requirement 19 — Authentication
+### Requirement 19 ï¿½ Authentication
 
 The application SHALL support optional user authentication through Supabase Auth.
 
@@ -341,7 +341,7 @@ The application SHALL be able to determine whether the current user is authentic
 
 ---
 
-### Requirement 20 — User Identity and Data Isolation
+### Requirement 20 ï¿½ User Identity and Data Isolation
 
 Future cloud-stored financial data SHALL be associated with the authenticated user's immutable
 Supabase user ID (`user.id`).
@@ -356,7 +356,7 @@ own financial records.
 
 ---
 
-### Requirement 21 — Local Data Migration
+### Requirement 21 ï¿½ Local Data Migration
 
 When cloud storage is introduced (Phase 17), the application SHALL provide a controlled migration
 path for existing LocalStorage financial data.
@@ -373,7 +373,7 @@ Migration SHALL:
 
 ---
 
-### Requirement 22 — Authentication Privacy and Security
+### Requirement 22 ï¿½ Authentication Privacy and Security
 
 The application SHALL:
 
@@ -385,12 +385,173 @@ The application SHALL:
 
 ---
 
+### Requirement 23 â€” Local Data Migration
+
+The application SHALL provide a controlled, explicit, and reversible migration path for
+authenticated users who have existing financial data in LocalStorage and wish to move it to
+the Supabase cloud store.
+
+#### 23.1 Migration Detection
+
+WHEN a user authenticates, THE App SHALL detect whether the user's browser contains LocalStorage
+financial data under the key `financeTrackerData`. THE App SHALL also determine whether cloud data
+already exists for that user in the Supabase `transactions` table. THE App SHALL use this
+information to classify the migration scenario and determine whether a migration opportunity
+should be offered.
+
+#### 23.2 Explicit User Consent
+
+THE App SHALL NOT silently upload LocalStorage data to the cloud at any time. Migration SHALL
+only proceed after the user has been informed about the presence of local data and has
+explicitly initiated the import action. Signing in alone SHALL NOT trigger migration.
+
+#### 23.3 Pre-Migration Validation
+
+WHEN the user initiates migration, THE App SHALL validate every local transaction, every local
+custom category, and the local settings before any upload begins.
+
+Transaction validation SHALL verify: the `id` field is a non-blank string; the `type` field
+is exactly `income` or `expense`; the `itemName` field is non-blank after trimming; the `amount`
+is a finite number greater than 0; the `category` field is non-blank after trimming; the `date`
+field matches the format `YYYY-MM-DD` and represents a valid calendar date; the `createdAt`
+field is a non-blank string.
+
+Custom category validation SHALL verify: the `name` is non-blank after trimming; the `type`
+is `income` or `expense`; no duplicate `(name, type)` pair exists in the local custom category
+list; the name is not a member of the built-in default category sets.
+
+Settings validation SHALL verify: the `currency` value exists and is a member of
+`Supported_Currencies`.
+
+IF any records fail validation, THE App SHALL report the invalid records to the user and SHALL
+NOT silently upload them. The user SHALL be given the opportunity to review invalid records
+before deciding whether to proceed with migrating the valid subset.
+
+#### 23.4 Transaction Idempotency
+
+THE migration SHALL use each transaction's existing `id` value as the cloud record's primary key.
+
+IF a transaction with the same `id` does not exist in the cloud, THE App SHALL insert it.
+
+IF a transaction with the same `id` already exists in the cloud AND the record data is
+identical, THE App SHALL skip it without error.
+
+IF a transaction with the same `id` already exists in the cloud AND the record data differs
+in any field, THE App SHALL NOT silently overwrite the cloud record. THE App SHALL report the
+conflict to the user.
+
+IF the cloud contains transactions that are not present in LocalStorage, THE App SHALL NOT
+delete them.
+
+#### 23.5 Category Handling
+
+Default categories (Food, Transport, Fun, Bills, Shopping, Health, Other for expense; Salary,
+Freelance, Business, Investment, Gift, Other for income) SHALL NOT be inserted into the cloud
+`categories` table. These are JavaScript constants and do not require cloud persistence.
+
+WHEN migrating a custom category, IF a category with the same `name` and `type` already exists
+in the cloud for the authenticated user, THE App SHALL skip it without error. Only non-default
+custom categories that do not already exist in the cloud SHALL be inserted.
+
+#### 23.6 Settings and Currency Handling
+
+WHEN local settings and cloud settings contain the same `currency` value, THE App SHALL migrate
+the currency setting without prompting the user.
+
+WHEN local settings and cloud settings contain different `currency` values, THE App SHALL present
+both values to the user and require the user to explicitly choose which currency to keep. THE App
+SHALL NOT apply either value automatically without user confirmation. THE App SHALL NOT perform
+any exchange-rate conversion on any transaction amount under any circumstances.
+
+#### 23.7 Existing Cloud Data Scenarios
+
+THE App SHALL define the following behaviors for each migration scenario:
+
+- **Scenario A** (local data present, cloud empty): Migration is available. The App SHALL offer
+  to import all valid local records to the cloud.
+- **Scenario B** (local empty, cloud has data): No migration is needed. The App SHALL NOT prompt
+  the user.
+- **Scenario C** (both local and cloud have data with no overlapping IDs): Migration is available.
+  The App SHALL merge local records into the cloud without deleting existing cloud records.
+- **Scenario D** (both contain records with identical IDs and data): Migration is available but
+  all records will be skipped as duplicates. Migration completes with zero insertions. Verification
+  SHALL still confirm cloud records are present.
+- **Scenario E** (both contain records with the same IDs but differing data): The App SHALL report
+  each conflicting record to the user. Non-conflicting records SHALL still be migrated. Conflicting
+  records SHALL NOT be inserted or overwritten without explicit user action.
+
+#### 23.8 Partial Migration and Retry
+
+IF migration fails partway through due to a network error or other interruption, THE App SHALL
+allow the user to retry the migration.
+
+WHEN retrying, THE App SHALL skip any records that were already successfully uploaded in a prior
+attempt, using the migration progress marker to determine which records were previously completed.
+This retry behavior SHALL ensure that retrying does not create duplicate cloud records.
+
+THE App SHALL NOT mark migration as successfully completed until all records have been uploaded
+and verified.
+
+#### 23.9 Migration Verification
+
+AFTER uploading all records, THE App SHALL verify the migration by fetching the uploaded records
+from the cloud and comparing them against the migration manifest. Verification SHALL check:
+
+- All migrated transaction IDs are present in the cloud.
+- All migrated custom category `(name, type)` pairs are present in the cloud.
+- The cloud settings `currency` matches the expected value.
+- A representative sample of migrated records has field values (amount, type, itemName) that
+  match the local source records.
+
+Verification SHALL NOT rely on count alone. THE App SHALL NOT set migration status to
+`completed` until all verification checks pass.
+
+#### 23.10 LocalStorage Preservation
+
+LocalStorage financial data SHALL NOT be deleted before migration has been verified as
+successfully completed. EVEN AFTER successful verification, THE App SHALL preserve the
+LocalStorage financial data as a backup unless the user explicitly chooses to clear it.
+THE App SHALL provide a "Clear local data" action that is only available after verification
+returns a successful result.
+
+#### 23.11 Migration Status Tracking
+
+THE App SHALL maintain a migration status for each authenticated user. The valid status values
+are: `not-needed`, `available`, `validating`, `ready`, `in-progress`, `partial`, `completed`,
+`failed`.
+
+Migration status SHALL be stored in the browser's LocalStorage under the key
+`financeTrackerMigration_${userId}`, where `userId` is the authenticated user's immutable
+Supabase UUID. THE App SHALL NOT use the user's email address as part of the status key.
+This key SHALL NOT be readable by other users.
+
+#### 23.12 Security
+
+THE migration SHALL use only the authenticated user's Supabase `user.id` (immutable UUID) as
+the ownership key for all uploaded records. THE App SHALL NOT use email address, username, or
+display name as an ownership identifier for migrated records.
+
+THE migration SHALL NOT use service-role credentials or any privileged API that bypasses
+Row-Level Security. All migrated records SHALL have their `user_id` field set to the
+authenticated user's UUID. Row-Level Security policies SHALL remain the database-level
+enforcement boundary for all migrated data.
+
+#### 23.13 Offline and Network Behavior
+
+IF the user is authenticated but the network is unavailable when migration is initiated, THE
+App SHALL not attempt migration and SHALL inform the user that a network connection is required.
+
+IF migration has started and the network becomes unavailable during the migration, THE App SHALL
+stop further upload attempts, preserve LocalStorage intact, set migration status to `partial`,
+and allow the user to retry when the network is restored.
+
 ## Requirement Coverage Matrix (Phase 15+)
 
 | Requirement | Description                        | Phase(s)    | Status         |
 |-------------|------------------------------------|-------------|----------------|
-| 1–18        | Original v1 Finance Tracker        | Phase 1–14  | Implemented    |
-| 19          | Authentication                     | Phase 15    | In progress    |
-| 20          | User Identity & Data Isolation     | Phase 16    | Not implemented |
-| 21          | Local Data Migration               | Phase 17    | Not implemented |
-| 22          | Authentication Privacy & Security  | Phase 15–18 | In progress    |
+| 1-18        | Original v1 Finance Tracker        | Phase 1-14  | Implemented    |
+| 19          | Authentication                     | Phase 15    | Implemented    |
+| 20          | User Identity & Data Isolation     | Phase 16    | Implemented    |
+| 21          | Local Data Migration (placeholder) | Phase 17    | Not implemented |
+| 22          | Authentication Privacy & Security  | Phase 15-18 | Implemented    |
+| 23          | Local Data Migration (detailed)    | Phase 17    | Not implemented |
