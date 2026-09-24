@@ -640,6 +640,30 @@
         "chatSessionId": "sess_a9515114-e745-4301-b8a0-af80c1dcd257",
         "timestamp": 1790219438402
       }
+    ],
+    "16.10 Settings / Currency Cloud Persistence": [
+      {
+        "executionId": "76d89bf8-a4c6-4955-a042-d1dec849affb",
+        "chatSessionId": "sess_17245a19-031d-4f3e-af00-003393f13668",
+        "timestamp": 1790220257335
+      },
+      {
+        "executionId": "76d89bf8-a4c6-4955-a042-d1dec849affb",
+        "chatSessionId": "sess_17245a19-031d-4f3e-af00-003393f13668",
+        "timestamp": 1790220324244
+      }
+    ],
+    "16.11 User Data Isolation Verification": [
+      {
+        "executionId": "4460330d-e655-43d9-bdb6-97f38b88c6c3",
+        "chatSessionId": "sess_aba50688-ceeb-41dd-826f-ed57eea6afc8",
+        "timestamp": 1790220368211
+      },
+      {
+        "executionId": "4460330d-e655-43d9-bdb6-97f38b88c6c3",
+        "chatSessionId": "sess_aba50688-ceeb-41dd-826f-ed57eea6afc8",
+        "timestamp": 1790220518129
+      }
     ]
   }
 }

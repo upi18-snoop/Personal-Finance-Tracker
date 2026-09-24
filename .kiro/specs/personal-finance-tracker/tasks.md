@@ -49,7 +49,7 @@ Acceptance criteria, and Dependencies.
 The implementation tasks are organized into the phases below. Task IDs and numbering are stable
 across the document (dependency graph and coverage matrix reference them directly).
 
-### Phase 1 � Project Foundation
+### Phase 1 ? Project Foundation
 
 - [x] 1. Project foundation: HTML shell, CSS foundation, JS module scaffolding
   - [x] 1.1 Create the semantic HTML shell and static structure
@@ -98,7 +98,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 2 � Data and Storage
+### Phase 2 ? Data and Storage
 
 - [x] 2. Data model and storage layer with recovery and provider abstraction
   - [x] 2.1 Define the data model and utility leaf helpers
@@ -162,7 +162,7 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Implementation details:**
       - Define the `StorageProvider` interface (documented shape): `read()`, `write(data)`, `clear()` (async signatures to allow network-backed providers later).
       - Implement `LocalStorageProvider` wrapping `window.localStorage` as the active v1 provider; `loadData/saveData/clearData` use it.
-      - Add `GoogleSheetsProvider` as a **placeholder class only** � constructing it throws "Not implemented in v1". No sync logic, no network calls, no auth.
+      - Add `GoogleSheetsProvider` as a **placeholder class only** ? constructing it throws "Not implemented in v1". No sync logic, no network calls, no auth.
       - Ensure business logic and UI depend only on `initializeData/loadData/saveData`, never on the provider class.
     - **Acceptance criteria:**
       - v1 persistence uses `LocalStorageProvider` and stores data only in the browser.
@@ -172,7 +172,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 3 � Transaction Management
+### Phase 3 ? Transaction Management
 
 - [x] 3. Transaction business logic and list rendering
   - [x] 3.1 Implement transaction creation, validation, and money math
@@ -180,8 +180,8 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Requirements covered:** 1.5, 2.1, 2.2, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11
     - **Files:** `js/transactions.js`
     - **Implementation details:**
-      - Implement `addTransaction(input)` returning `{ ok: true, transaction }` or `{ ok: false, errors }`. Validate: type is `income`/`expense` (2.2, 2.4), item name non-blank via `isBlank` (2.5), amount is a number > 0 (2.6), category selected (2.7), date valid via `isValidDate` (2.8). On success build a `Transaction` with `id`, `type`, `itemName`, `amount`, `category`, `date`, `createdAt`, append, and persist via `storage.saveData` (2.9�2.11).
-      - Implement `getTransactions()` and `calculateTotals(transactions = getTransactions())` returning `{ totalIncome, totalExpense, balance: totalIncome - totalExpense, count }` � the only place money math is computed (1.5).
+      - Implement `addTransaction(input)` returning `{ ok: true, transaction }` or `{ ok: false, errors }`. Validate: type is `income`/`expense` (2.2, 2.4), item name non-blank via `isBlank` (2.5), amount is a number > 0 (2.6), category selected (2.7), date valid via `isValidDate` (2.8). On success build a `Transaction` with `id`, `type`, `itemName`, `amount`, `category`, `date`, `createdAt`, append, and persist via `storage.saveData` (2.9?2.11).
+      - Implement `getTransactions()` and `calculateTotals(transactions = getTransactions())` returning `{ totalIncome, totalExpense, balance: totalIncome - totalExpense, count }` ? the only place money math is computed (1.5).
     - **Acceptance criteria:**
       - Valid input creates and persists a well-formed transaction; invalid input is rejected with a validation error and no state change.
       - `balance === totalIncome - totalExpense` for any transaction set.
@@ -228,7 +228,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 4 � Dashboard
+### Phase 4 ? Dashboard
 
 - [x] 4. Dashboard rendering and reactivity
   - [x] 4.1 Render dashboard totals, selected month, count, and recent transactions
@@ -256,7 +256,7 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Dependencies:** 4.1, 3.3, 3.5
 ---
 
-### Phase 5 � Monthly Reports
+### Phase 5 ? Monthly Reports
 
 - [x] 5. Monthly summary with category analysis
   - [x] 5.1 Implement month-scoped reads and category totals in business logic
@@ -306,7 +306,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 6 � Transaction Search and Filters
+### Phase 6 ? Transaction Search and Filters
 
 - [x] 6. Read-only search and filtering over the transaction list
   - [x] 6.1 Implement the pure filterTransactions view function
@@ -314,14 +314,14 @@ across the document (dependency graph and coverage matrix reference them directl
     - **Requirements covered:** 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.14
     - **Files:** `js/transactions.js`
     - **Implementation details:**
-      - `filterTransactions(transactions, criteria)` applies: case-insensitive substring match on `itemName` (4.2), type `all`/`income`/`expense` (4.3�4.5), category equality (4.6), month membership (4.7), combined as AND (4.8).
+      - `filterTransactions(transactions, criteria)` applies: case-insensitive substring match on `itemName` (4.2), type `all`/`income`/`expense` (4.3?4.5), category equality (4.6), month membership (4.7), combined as AND (4.8).
       - Return a NEW array; never mutate, reorder, or write back (4.14).
     - **Acceptance criteria:**
       - Returns exactly the transactions satisfying all active criteria; input array is not mutated.
     - **Dependencies:** 3.1
 
   - [x] 6.3 Build filter/search controls and apply filters to the list only
-    - **Objective:** Add search term, type, category, and month filter controls that recompute the list immediately on change � affecting only the Transaction_List.
+    - **Objective:** Add search term, type, category, and month filter controls that recompute the list immediately on change ? affecting only the Transaction_List.
     - **Requirements covered:** 4.1, 4.9, 4.12
     - **Files:** `index.html`, `js/app.js`, `css/styles.css`
     - **Implementation details:**
@@ -345,7 +345,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 7 � Charts
+### Phase 7 ? Charts
 
 - [x] 7. Chart.js integration for category analysis
   - [x] 7.1 Integrate Chart.js and initialize chart canvases
@@ -395,7 +395,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 8 � Custom Categories
+### Phase 8 ? Custom Categories
 
 - [x] 8. Custom category management
   - [x] 8.1 Implement category business logic (get, add, validate, delete rules)
@@ -426,7 +426,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 9 � Responsive UI
+### Phase 9 ? Responsive UI
 
 - [x] 9. Responsive, touch-friendly layout
   - [x] 9.1 Implement mobile-first layout with no horizontal scroll
@@ -452,7 +452,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 10 � Error Handling and Security
+### Phase 10 ? Error Handling and Security
 
 - [x] 10. Error handling, safe rendering, and empty states
   - [x] 10.1 Consolidate invalid-input and corrupted-storage handling
@@ -490,12 +490,12 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 11 � Quality Assurance
+### Phase 11 ? Quality Assurance
 
 - [x] 11. Manual QA, compatibility, and performance verification
   - [x] 11.1 Execute manual functional test cases
     - **Objective:** Run the design's manual acceptance test cases and record results.
-    - **Requirements covered:** 1.1�1.8, 2.1�2.13, 3.1�3.7, 4.1�4.14, 5.1�5.9, 6.1�6.7, 7.1�7.7, 8.1�8.8, 9.1�9.5, 10.1�10.7, 11.1�11.3
+    - **Requirements covered:** 1.1?1.8, 2.1?2.13, 3.1?3.7, 4.1?4.14, 5.1?5.9, 6.1?6.7, 7.1?7.7, 8.1?8.8, 9.1?9.5, 10.1?10.7, 11.1?11.3
     - **Files:** `README.md` (record results/checklist)
     - **Implementation details:**
       - Execute the manual test matrix from the design (add income/expense, delete, balance, monthly filtering, category analysis, custom categories, invalid input, persistence, empty states, filtered empty state, clear filters, in-use category delete, corrupted storage, privacy notice).
@@ -528,7 +528,7 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 12 � Documentation
+### Phase 12 ? Documentation
 
 - [x] 12. Project documentation
   - [x] 12.1 Write README with setup, deployment, privacy, and future architecture
@@ -539,22 +539,22 @@ across the document (dependency graph and coverage matrix reference them directl
       - Setup/run instructions (open `index.html` directly; no build step, no install).
       - GitHub Pages deployment instructions for the static site.
       - Data/privacy explanation: data stored only in the browser's `localStorage`, never sent to a server; Chart.js loads from a CDN and carries no financial data.
-      - Future architecture notes: the versioned schema + `StorageProvider` seam enable future Google Sheets sync, CSV export/import, and JSON backup/restore � **documented as extension points only, not implemented in v1**.
+      - Future architecture notes: the versioned schema + `StorageProvider` seam enable future Google Sheets sync, CSV export/import, and JSON backup/restore ? **documented as extension points only, not implemented in v1**.
     - **Acceptance criteria:**
       - README lets a new user run and deploy the app and understand the privacy model and future extension points.
     - **Dependencies:** 12 (all prior implementation phases), 2.7
 
 ---
 
-### Phase 13 � Final Verification
+### Phase 13 ? Final Verification
 
 - [x] 13. Final full-application verification against all requirements
   - **Objective:** Verify the completed application against ALL 17 requirements and their acceptance criteria using the coverage matrix below.
-  - **Requirements covered:** 1�17 (all)
+  - **Requirements covered:** 1?17 (all)
   - **Files:** `README.md` (final verification checklist), all `js/*.js`, `index.html`, `css/styles.css`
   - **Implementation details:**
     - Walk the Requirement Coverage Matrix and confirm each requirement is satisfied by its implementing tasks.
-    - Re-run the consistency regression (Property 8) and confirm all correctness properties (1�15) hold via their property tests or manual checks.
+    - Re-run the consistency regression (Property 8) and confirm all correctness properties (1?15) hold via their property tests or manual checks.
     - Confirm no forbidden technology is used and no build step is required, and that Google Sheets sync remains a documented placeholder only.
     - Confirm document completeness/consistency (Req 17) is reflected: terminology matches the glossary and every acceptance criterion is traceable to a task.
   - **Acceptance criteria:**
@@ -563,12 +563,12 @@ across the document (dependency graph and coverage matrix reference them directl
 
 ---
 
-### Phase 14 � Currency Configuration (Configurable Single Currency)
+### Phase 14 ? Currency Configuration (Configurable Single Currency)
 
 This phase adds the configurable single-currency model (Req 9 rewrite + new Req 18). Task 2.1 already
 implemented `formatCurrency` with a hard-coded `id-ID` locale and a currency-only signature; the
 formatter change here is a **modification of that already-complete code**, represented as a new task
-(14.1) rather than re-opening 2.1. No stored transaction amounts are ever converted or mutated � the
+(14.1) rather than re-opening 2.1. No stored transaction amounts are ever converted or mutated ? the
 Selected_Currency is a presentation-only display setting.
 
 - [x] 14. Configurable single currency (Selected_Currency across all displayed money)
@@ -592,7 +592,7 @@ Selected_Currency is a presentation-only display setting.
     - **Implementation details:**
       - Implement `getCurrency()` returning `settings.currency` when it is a member of `Supported_Currencies`, else `"IDR"` (absent/invalid fallback, Req 18.3/18.4).
       - Implement `setCurrency(code)` validating `code ? Supported_Currencies`, persisting `settings.currency` via `saveData`, and leaving `transactions` untouched (Req 18.6/9.8).
-      - Additive only: `settings.currency` already exists in the schema (default `"IDR"`) � no schema/version change.
+      - Additive only: `settings.currency` already exists in the schema (default `"IDR"`) ? no schema/version change.
     - **Acceptance criteria:**
       - `getCurrency()` returns the persisted code, or `"IDR"` when absent/invalid.
       - `setCurrency("USD")` persists the setting and does not alter any transaction.
@@ -605,7 +605,7 @@ Selected_Currency is a presentation-only display setting.
     - **Implementation details:**
       - Add a labelled currency `<select>` in a Settings section of `index.html`, listing every member of `Supported_Currencies` (code + label).
       - In `app.js`, add `state.selectedCurrency` seeded from `storage.getCurrency()` during `bootstrap()`; default-to-IDR is inherited from the accessor.
-      - Implement `onCurrencyChange(code)`: call `storage.setCurrency(code)`, update `state.selectedCurrency`, then re-render every currency-formatted surface (dashboard totals/Total_Balance, monthly summary, transaction list, chart tooltips/labels) WITHOUT modifying stored amounts (Req 18.6) � a reporting-style re-render like a month change.
+      - Implement `onCurrencyChange(code)`: call `storage.setCurrency(code)`, update `state.selectedCurrency`, then re-render every currency-formatted surface (dashboard totals/Total_Balance, monthly summary, transaction list, chart tooltips/labels) WITHOUT modifying stored amounts (Req 18.6) ? a reporting-style re-render like a month change.
     - **Acceptance criteria:**
       - The Settings selector lists all Supported_Currencies and reflects the persisted Selected_Currency on load.
       - Changing the currency re-formats all displayed money app-wide with no change to stored transaction data.
@@ -1045,14 +1045,14 @@ broken or removed.
 
 ---
 
-### Phase 16 — Cloud Database & User Data Isolation
+### Phase 16 � Cloud Database & User Data Isolation
 
 > **Scope note:** Phase 16 introduces Supabase PostgreSQL as the cloud data store for
 > authenticated users. LocalStorage remains the active provider for any unauthenticated
-> state and is left untouched for migration in Phase 17. All Phase 1–15 functionality
+> state and is left untouched for migration in Phase 17. All Phase 1�15 functionality
 > is preserved and unchanged.
 >
-> Implementation order: 16.1 → 16.2 → 16.3 → 16.4 → 16.5 → 16.6 → 16.7 → 16.8 → 16.9 → 16.10 → 16.11 → 16.12
+> Implementation order: 16.1 ? 16.2 ? 16.3 ? 16.4 ? 16.5 ? 16.6 ? 16.7 ? 16.8 ? 16.9 ? 16.10 ? 16.11 ? 16.12
 
 - [ ] 16. Cloud Database & User Data Isolation
   - [x] 16.1 Database Schema
@@ -1065,11 +1065,11 @@ broken or removed.
       - `settings`: `user_id UUID PK REFERENCES auth.users(id) ON DELETE CASCADE`, `currency TEXT NOT NULL DEFAULT 'IDR'`, `created_at/updated_at TIMESTAMPTZ`.
       - Indexes: `idx_transactions_user_id ON transactions(user_id)`, `idx_transactions_user_date ON transactions(user_id, date)`. No redundant index on categories (UNIQUE constraint covers it). No index on settings.user_id (PK is auto-indexed).
       - Default categories remain JavaScript constants; no default-category rows are inserted.
-      - RLS is NOT enabled in this task — Task 16.2 handles it.
+      - RLS is NOT enabled in this task � Task 16.2 handles it.
       - Apply via Supabase SQL Editor or `supabase db push`.
-    - **JavaScript ↔ PostgreSQL field mapping** (implemented by SupabaseDatabaseProvider in Task 16.4):
-      - `itemName` ↔ `item_name`
-      - `createdAt` ↔ `created_at`
+    - **JavaScript ? PostgreSQL field mapping** (implemented by SupabaseDatabaseProvider in Task 16.4):
+      - `itemName` ? `item_name`
+      - `createdAt` ? `created_at`
       - All other fields are identical.
     - **Acceptance criteria:**
       - `supabase/schema.sql` exists and is syntactically valid SQL.
@@ -1098,7 +1098,7 @@ broken or removed.
     - **Dependencies:** 16.1
 
   - [x] 16.3 Supabase Client Module (`supabase.js`)
-    - **Objective:** Create `js/supabase.js` as a lazy singleton factory for the Supabase client, then refactor `auth.js` to import from it — eliminating future duplication between the auth and storage layers.
+    - **Objective:** Create `js/supabase.js` as a lazy singleton factory for the Supabase client, then refactor `auth.js` to import from it � eliminating future duplication between the auth and storage layers.
     - **Requirements covered:** 22 (no credential exposure), 20 (shared authenticated client)
     - **Files:** `js/supabase.js` (new), `js/auth.js` (minor refactor)
     - **Implementation details:**
@@ -1112,20 +1112,20 @@ broken or removed.
     - **Dependencies:** 16.2
 
   - [x] 16.4 `SupabaseDatabaseProvider`
-    - **Objective:** Implement `SupabaseDatabaseProvider` in `storage.js` — a record-level CRUD provider that reads and writes to the three Supabase tables.
+    - **Objective:** Implement `SupabaseDatabaseProvider` in `storage.js` � a record-level CRUD provider that reads and writes to the three Supabase tables.
     - **Requirements covered:** 20, 10 (persistence), 13 (provider swappability)
     - **Files:** `js/storage.js`
     - **Implementation details:**
       - Implement all CRUD methods: `getTransactions(userId)`, `addTransaction(userId, tx)`, `deleteTransaction(userId, id)`, `getCustomCategories(userId)`, `addCategory(userId, name, type)`, `deleteCategory(userId, name, type)`, `getSettings(userId)`, `setSettings(userId, settings)`, `initializeData(userId)`.
       - `initializeData`: if no settings row exists for the user, insert default (`currency: 'IDR'`). Uses `INSERT ... ON CONFLICT (user_id) DO NOTHING`.
-      - Apply JS↔DB field mapping (`itemName`/`item_name`, `createdAt`/`created_at`).
+      - Apply JS?DB field mapping (`itemName`/`item_name`, `createdAt`/`created_at`).
       - All methods are `async` (return Promises).
       - Keep `LocalStorageProvider` fully intact.
     - **Acceptance criteria:**
       - Transactions can be added, read, and deleted from Supabase via the provider.
       - Custom categories can be added, read, and deleted.
       - Settings row is created on first login; updated on currency change.
-      - Field mapping is applied on both read (snake_case → camelCase) and write (camelCase → snake_case).
+      - Field mapping is applied on both read (snake_case ? camelCase) and write (camelCase ? snake_case).
     - **Dependencies:** 16.3
 
   - [x] 16.5 Async Storage Interface
@@ -1135,7 +1135,7 @@ broken or removed.
     - **Implementation details:**
       - Convert `initializeData`, `getCurrency`, `setCurrency` and the new CRUD exports to `async` functions.
       - Provider selection: `const provider = userId ? new SupabaseDatabaseProvider(...) : new LocalStorageProvider()` resolved per-call or at initialization.
-      - `LocalStorageProvider` remains unchanged — unauthenticated paths still work.
+      - `LocalStorageProvider` remains unchanged � unauthenticated paths still work.
     - **Acceptance criteria:**
       - Calling storage functions with a valid `userId` routes to Supabase.
       - Calling without a `userId` (or with null) routes to LocalStorage.
@@ -1144,12 +1144,12 @@ broken or removed.
 
   - [x] 16.6 Async Business Logic
     - **Objective:** Make `transactions.js` and `categories.js` async throughout; thread `userId` (from `state.currentUser.id`) into all data operations.
-    - **Requirements covered:** 20, 1–8 (all data-touching requirements)
+    - **Requirements covered:** 20, 1�8 (all data-touching requirements)
     - **Files:** `js/transactions.js`, `js/categories.js`
     - **Implementation details:**
       - `transactions.js`: `addTransaction`, `deleteTransaction`, `getTransactions`, `getTransactionsByMonth` become `async`; accept `userId` parameter or read from a passed context.
       - `categories.js`: `getCategories`, `addCategory`, `deleteCategory`, `isCategoryInUse` become `async`.
-      - Pure functions (`filterTransactions`, `calculateTotals`, `categoryTotals`) stay synchronous — they operate on arrays passed to them, not on storage.
+      - Pure functions (`filterTransactions`, `calculateTotals`, `categoryTotals`) stay synchronous � they operate on arrays passed to them, not on storage.
     - **Acceptance criteria:**
       - All storage-touching functions in both modules return Promises.
       - Pure functions are unchanged.
@@ -1172,27 +1172,27 @@ broken or removed.
 
   - [x] 16.8 Transaction CRUD Verification
     - **Objective:** Verify that transactions can be created, read, and deleted from Supabase for an authenticated user, and that dashboard totals are computed from cloud data.
-    - **Requirements covered:** 1–3, 20
+    - **Requirements covered:** 1�3, 20
     - **Files:** None (verification only)
     - **Acceptance criteria:**
-      - Add an income and an expense transaction → both appear in the Supabase `transactions` table under the correct `user_id`.
+      - Add an income and an expense transaction ? both appear in the Supabase `transactions` table under the correct `user_id`.
       - Dashboard totals reflect the cloud data.
-      - Delete a transaction → row removed from Supabase; dashboard updates.
+      - Delete a transaction ? row removed from Supabase; dashboard updates.
       - A second authenticated user sees an empty dashboard (no cross-user data).
     - **Dependencies:** 16.7
 
-  - [-] 16.9 Category CRUD Verification
+  - [x] 16.9 Category CRUD Verification
     - **Objective:** Verify that custom categories are stored per-user in Supabase and that all category rules (duplicate prevention, in-use guard) work against cloud data.
     - **Requirements covered:** 8, 20
     - **Files:** None (verification only)
     - **Acceptance criteria:**
-      - Add a custom category → row appears in Supabase `categories` table under the correct `user_id`.
+      - Add a custom category ? row appears in Supabase `categories` table under the correct `user_id`.
       - Default categories remain JS constants (no DB rows for them).
       - Duplicate category for same user/type is rejected by UNIQUE constraint + application guard.
       - In-use category cannot be deleted (checked against cloud transactions).
     - **Dependencies:** 16.7
 
-  - [ ] 16.10 Settings / Currency Cloud Persistence
+  - [x] 16.10 Settings / Currency Cloud Persistence
     - **Objective:** Verify that the currency setting is stored in and loaded from the Supabase `settings` table.
     - **Requirements covered:** 18, 20
     - **Files:** None (verification only)
@@ -1202,28 +1202,28 @@ broken or removed.
       - The currency persists across browser close and reopen (loaded from Supabase on next login).
     - **Dependencies:** 16.7
 
-  - [ ] 16.11 User Data Isolation Verification
+  - [x] 16.11 User Data Isolation Verification
     - **Objective:** Prove that RLS correctly prevents cross-user data access using two real Supabase accounts.
     - **Requirements covered:** 20, 22
     - **Files:** None (verification only)
     - **Acceptance criteria:**
       - User A's transactions, categories, and settings are completely invisible to User B.
-      - Attempting a cross-user read via the Supabase JS client returns 0 rows (not an error, just empty — RLS silently filters).
+      - Attempting a cross-user read via the Supabase JS client returns 0 rows (not an error, just empty � RLS silently filters).
       - Attempting a cross-user INSERT with a spoofed `user_id` is rejected by the RLS `WITH CHECK` policy.
       - LocalStorage data for either user is untouched.
     - **Dependencies:** 16.8, 16.9, 16.10
 
   - [ ] 16.12 Cloud Database Phase 16 QA
-    - **Objective:** Full functional regression test of all Phase 1–15 features while authenticated and using cloud data.
-    - **Requirements covered:** 1–22 (all)
+    - **Objective:** Full functional regression test of all Phase 1�15 features while authenticated and using cloud data.
+    - **Requirements covered:** 1�22 (all)
     - **Files:** `README.md` (record Phase 16 QA results)
     - **Implementation details:**
-      - Run the complete manual test matrix (Groups A–K from Phase 11) while authenticated with cloud data.
+      - Run the complete manual test matrix (Groups A�K from Phase 11) while authenticated with cloud data.
       - Verify loading states, error messages, session expiry handling.
-      - Confirm no Phase 1–15 regressions.
+      - Confirm no Phase 1�15 regressions.
       - Confirm LocalStorage `financeTrackerData` key is untouched (Phase 17 migration not triggered).
     - **Acceptance criteria:**
-      - All Phase 1–15 functional test cases pass while authenticated.
+      - All Phase 1�15 functional test cases pass while authenticated.
       - Cloud data persists correctly across browser close/reopen.
       - No regressions. No private credentials in the repository.
     - **Dependencies:** 16.11
