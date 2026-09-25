@@ -674,6 +674,14 @@ function wireTransactionListDeletion() {
   const listEl = document.getElementById("transaction-list");
   if (!listEl) return;
 
+  // Idempotency guard: mirrors the pattern used in wireTransactionForm().
+  // If initializeFinanceApplication() runs twice (e.g. SIGNED_OUT then SIGNED_IN
+  // during session restoration resets financeAppInitialized), a second call would
+  // attach a second delegated click listener and produce two confirmation dialogs
+  // per Delete click. Stamping the list element prevents that.
+  if (listEl.dataset.wired === "true") return;
+  listEl.dataset.wired = "true";
+
   listEl.addEventListener("click", (event) => {
     const trigger = event.target.closest('[data-action="delete"]');
     if (!trigger || !listEl.contains(trigger)) return;
