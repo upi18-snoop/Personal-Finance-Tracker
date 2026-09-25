@@ -152,6 +152,44 @@
     </div>
   </section>
 
+  <!-- New-password section: shown/hidden by JS after PASSWORD_RECOVERY auth event -->
+  <section class="auth-section" id="new-password-section" aria-labelledby="new-password-heading" hidden>
+    <div class="auth-card">
+      <h2 class="auth-card__heading" id="new-password-heading">Set New Password</h2>
+      <p class="auth-card__description">Enter and confirm your new password below.</p>
+      <form class="auth-form" id="new-password-form" novalidate>
+        <!-- new password field -->
+        <div class="form-field">
+          <label for="new-password">New password</label>
+          <input type="password" id="new-password" name="newPassword"
+                 autocomplete="new-password" minlength="8"
+                 aria-describedby="new-password-field-error" required>
+          <span class="field-error" id="new-password-field-error" data-field-error="newPassword"
+                role="alert" aria-live="polite"></span>
+        </div>
+        <!-- confirm new password field -->
+        <div class="form-field">
+          <label for="confirm-new-password">Confirm new password</label>
+          <input type="password" id="confirm-new-password" name="confirmNewPassword"
+                 autocomplete="new-password" minlength="8"
+                 aria-describedby="confirm-new-password-error" required>
+          <span class="field-error" id="confirm-new-password-error" data-field-error="confirmNewPassword"
+                role="alert" aria-live="polite"></span>
+        </div>
+        <!-- form-level error/message -->
+        <p class="form-error" id="new-password-error" role="alert" aria-live="polite"></p>
+        <!-- submit -->
+        <div class="form-actions">
+          <button type="submit" id="new-password-submit">Set new password</button>
+        </div>
+      </form>
+      <!-- success state (hidden until password is updated) -->
+      <div class="auth-success" id="new-password-success" hidden>
+        <p class="auth-success__message" id="new-password-success-message"></p>
+      </div>
+    </div>
+  </section>
+
   <main class="app-main" id="app-main" hidden>
     <!--
       Global empty state (Req 11.1, 11.3): shown when no transactions exist;

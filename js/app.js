@@ -45,6 +45,20 @@ function currentMonthKey() {
  *  - selectedCurrency: active ISO 4217 currency code for all formatted money
  *    values; seeded from storage.getCurrency() at bootstrap (Req 18.5).
  */
+/**
+ * True when this page load was triggered by a Supabase password-recovery
+ * redirect (#access_token=...&type=recovery in the URL hash). Read once,
+ * synchronously, at module evaluation time — before any Supabase client is
+ * created — so the hash cannot be consumed by the SDK before we inspect it.
+ * Used by bootstrap() and the onAuthStateChange callback to suppress normal
+ * dashboard initialisation during a recovery session.
+ * @type {boolean}
+ */
+const isRecoveryRedirect = (
+  typeof window !== 'undefined' &&
+  window.location.hash.includes('type=recovery')
+);
+
 const state = {
   selectedMonth: currentMonthKey(),
   filterCriteria: { searchTerm: "", type: "all", category: "", month: "" },
@@ -1775,6 +1789,166 @@ function wireResetPasswordForm() {
 }
 
 /* --------------------------------------------------------------------------
+ * New-password (PASSWORD_RECOVERY) flow
+ *
+ * Shown exclusively when Supabase fires the PASSWORD_RECOVERY auth event,
+ * which occurs after the user clicks a password-reset link. The dashboard
+ * and finance application are never initialised during this flow.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Show the new-password section; hide all other auth sections and app-main.
+ * @returns {void}
+ */
+function showNewPasswordView() {
+  const section = document.getElementById("new-password-section");
+  const appMain = document.getElementById("app-main");
+  const loginSection = document.getElementById("login-section");
+  const registerSection = document.getElementById("register-section");
+  const resetSection = document.getElementById("reset-password-section");
+  if (section) section.hidden = false;
+  if (appMain) appMain.hidden = true;
+  if (loginSection) loginSection.hidden = true;
+  if (registerSection) registerSection.hidden = true;
+  if (resetSection) resetSection.hidden = true;
+}
+
+/**
+ * Hide the new-password section and clear its form state.
+ * @returns {void}
+ */
+function hideNewPasswordView() {
+  const section = document.getElementById("new-password-section");
+  if (section) section.hidden = true;
+  resetNewPasswordForm();
+}
+
+/**
+ * Clear all fields, errors, and the success state on the new-password form.
+ * @returns {void}
+ */
+function resetNewPasswordForm() {
+  const form = document.getElementById("new-password-form");
+  if (form) form.reset();
+  utils.safeText(document.getElementById("new-password-field-error"), "");
+  utils.safeText(document.getElementById("confirm-new-password-error"), "");
+  utils.safeText(document.getElementById("new-password-error"), "");
+  const successEl = document.getElementById("new-password-success");
+  if (successEl) successEl.hidden = true;
+  const submitBtn = document.getElementById("new-password-submit");
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    utils.safeText(submitBtn, "Set new password");
+  }
+}
+
+/**
+ * Handle new-password form submission during a PASSWORD_RECOVERY session.
+ * Validates inputs, calls auth.updatePassword(), shows success or errors,
+ * then signs the user out and returns them to the login view.
+ * @param {Event} event
+ * @returns {void}
+ */
+function onNewPasswordSubmit(event) {
+  event.preventDefault();
+
+  const newPasswordEl = document.getElementById("new-password");
+  const confirmEl = document.getElementById("confirm-new-password");
+  const submitBtn = document.getElementById("new-password-submit");
+  const fieldErrorEl = document.getElementById("new-password-field-error");
+  const confirmErrorEl = document.getElementById("confirm-new-password-error");
+  const formErrorEl = document.getElementById("new-password-error");
+
+  // Clear previous messages.
+  utils.safeText(fieldErrorEl, "");
+  utils.safeText(confirmErrorEl, "");
+  utils.safeText(formErrorEl, "");
+
+  const newPassword = newPasswordEl ? newPasswordEl.value : "";
+  const confirmPassword = confirmEl ? confirmEl.value : "";
+
+  // Validate new password.
+  if (!newPassword || newPassword.length === 0) {
+    utils.safeText(fieldErrorEl, "Please enter a new password.");
+    if (newPasswordEl) newPasswordEl.focus();
+    return;
+  }
+  if (newPassword.length < 8) {
+    utils.safeText(fieldErrorEl, "Password must be at least 8 characters.");
+    if (newPasswordEl) newPasswordEl.focus();
+    return;
+  }
+
+  // Validate confirmation.
+  if (!confirmPassword || confirmPassword.length === 0) {
+    utils.safeText(confirmErrorEl, "Please confirm your new password.");
+    if (confirmEl) confirmEl.focus();
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    utils.safeText(confirmErrorEl, "Passwords do not match.");
+    if (confirmEl) confirmEl.focus();
+    return;
+  }
+
+  // Disable submit while request is in flight.
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    utils.safeText(submitBtn, "Saving\u2026");
+  }
+
+  (async () => {
+    const result = await auth.updatePassword(newPassword);
+
+    if (result.ok) {
+      // Show success message.
+      const successEl = document.getElementById("new-password-success");
+      const successMsg = document.getElementById("new-password-success-message");
+      if (successMsg) {
+        utils.safeText(successMsg, "Password updated successfully! Signing you out\u2026");
+      }
+      if (successEl) successEl.hidden = false;
+
+      // Sign out the recovery session so the user must sign in with the new
+      // password, preventing accidental session re-use.
+      await auth.signOut().catch(() => {});
+
+      // Brief pause so the success message is visible before navigating away.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      hideNewPasswordView();
+      showSignedOutState();
+      showLoginView();
+      return;
+    }
+
+    // Error path.
+    const message = result.error?.message || "Could not update password. Please try again.";
+    utils.safeText(formErrorEl, message);
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      utils.safeText(submitBtn, "Set new password");
+    }
+  })();
+}
+
+/**
+ * Wire the new-password form submit listener exactly once.
+ * Uses the same dataset.wired idempotency guard pattern as wireTransactionForm()
+ * and wireTransactionListDeletion() (Req 2.1 / 16.2).
+ * @returns {void}
+ */
+function wireNewPasswordForm() {
+  const form = document.getElementById("new-password-form");
+  if (!form) return;
+
+  if (form.dataset.wired === "true") return;
+  form.dataset.wired = "true";
+
+  form.addEventListener("submit", onNewPasswordSubmit);
+}
+
+/* --------------------------------------------------------------------------
  * Session persistence & auth state (task 15.7)
  * -------------------------------------------------------------------------- */
 
@@ -1786,7 +1960,14 @@ function wireResetPasswordForm() {
 async function initAuthSession() {
   // Register the auth-state listener first so we never miss a state change.
   auth.onAuthStateChange((event, user) => {
-    if (user) {
+    // PASSWORD_RECOVERY must be intercepted before the generic signed-in branch
+    // so the recovery session never triggers dashboard initialisation (Req 26.x).
+    if (event === 'PASSWORD_RECOVERY') {
+      showNewPasswordView();
+      return;
+    }
+
+    if (user && !isRecoveryRedirect) {
       state.currentUser = user;
       showSignedInState(user.email);
       showProtectedApp();
@@ -2492,6 +2673,7 @@ async function bootstrap() {
   wireLoginForm();
   wireLogoutButton();
   wireResetPasswordForm();
+  wireNewPasswordForm();
 
   // Show loading state while auth resolves.
   const authLoadingEl = document.getElementById("auth-loading");
@@ -2500,13 +2682,16 @@ async function bootstrap() {
   // Hide the protected app during auth resolution to prevent flash of finance data.
   hideProtectedApp();
 
+
+  // isRecoveryRedirect is a module-level constant (see top of state section).
   // Resolve authentication state.
+
   const user = await initAuthSession();
 
   // Auth resolved - hide loading state.
   if (authLoadingEl) authLoadingEl.hidden = true;
 
-  if (user) {
+  if (user && !isRecoveryRedirect) {
     showSignedInState(user.email);
     showProtectedApp();
     await initializeFinanceApplication();

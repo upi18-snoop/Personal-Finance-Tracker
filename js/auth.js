@@ -393,16 +393,57 @@ export async function resetPassword(email, redirectTo) {
   const client = await getSupabaseClient();
   if (!client) return _configError();
 
-  // Derive redirect URL from the current page origin when not explicitly
-  // provided. This resolves correctly on both localhost and GitHub Pages.
+  // Derive redirect URL from the current page href when not explicitly
+  // provided. Using window.location.href (trimmed to the last '/') rather than
+  // window.location.origin ensures the full path is included for GitHub Pages
+  // project sites, e.g.:
+  //   origin → https://upi18-snoop.github.io          (wrong — site-root only)
+  //   href   → https://upi18-snoop.github.io/Personal-Finance-Tracker/  (correct)
+  // On localhost (http://localhost:5500/) href already ends with '/' so the
+  // slice is a no-op and the result is identical to using origin.
   const redirect =
     typeof redirectTo === 'string' && redirectTo.length > 0
       ? redirectTo
-      : (typeof window !== 'undefined' ? window.location.origin : undefined);
+      : (typeof window !== 'undefined'
+          ? window.location.href.slice(0, window.location.href.lastIndexOf('/') + 1)
+          : undefined);
 
   const options = redirect ? { redirectTo: redirect } : {};
 
   const { error } = await client.auth.resetPasswordForEmail(email.trim(), options);
+
+  if (error) {
+    return { ok: false, error: _normalizeError(error) };
+  }
+  return { ok: true };
+}
+
+/**
+ * Update the authenticated user's password.
+ *
+ * Must only be called while a PASSWORD_RECOVERY session is active (i.e. after
+ * the user has clicked the Supabase reset-password link and the SDK has fired
+ * the 'PASSWORD_RECOVERY' auth event). Supabase enforces this server-side —
+ * the call will fail if called outside a recovery session.
+ *
+ * Passwords are NEVER stored, logged, or returned.
+ *
+ * @param {string} newPassword  The replacement password (min 8 characters).
+ * @returns {Promise<{ ok: true } | { ok: false, error: { code: string, message: string } }>}
+ */
+export async function updatePassword(newPassword) {
+  // Client-side pre-validation — mirrors the pattern used in signUp().
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length === 0) {
+    return { ok: false, error: { code: 'validation-error', message: 'Please enter a new password.' } };
+  }
+  if (newPassword.length < 8) {
+    return { ok: false, error: { code: 'validation-error', message: 'Password must be at least 8 characters.' } };
+  }
+
+  const client = await getSupabaseClient();
+  if (!client) return _configError();
+
+  const { error } = await client.auth.updateUser({ password: newPassword });
 
   if (error) {
     return { ok: false, error: _normalizeError(error) };
