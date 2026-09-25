@@ -246,6 +246,16 @@ async function wireTransactionForm() {
   const form = document.getElementById("transaction-form");
   if (!form) return;
 
+  // Idempotency guard: addEventListener does not deduplicate anonymous handlers,
+  // so a second call to wireTransactionForm() would attach a second submit
+  // listener and cause duplicate transactions. Stamp the form on first wire and
+  // bail out on any subsequent call. The stamp is removed by clearFinanceUIDOM()
+  // if charts.destroyCharts() / full teardown resets the DOM on logout, but the
+  // form element itself persists in the DOM across sessions, so this guard is
+  // the correct defence-in-depth layer here (Req 2.1 / 16.2).
+  if (form.dataset.wired === "true") return;
+  form.dataset.wired = "true";
+
   const typeEl = form.querySelector("#transaction-type");
   const categoryEl = form.querySelector("#transaction-category");
   const dateEl = form.querySelector("#transaction-date");

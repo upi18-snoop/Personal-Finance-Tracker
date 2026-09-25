@@ -772,6 +772,7 @@ body {
    wider than the viewport on narrow screens (Req 12.3). */
 .chart-container {
   position: relative;
+  height: 300px;
   max-width: 32rem;
   margin-inline: auto;
   overflow: hidden;

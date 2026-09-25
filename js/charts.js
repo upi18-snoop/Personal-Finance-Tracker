@@ -11,6 +11,19 @@
  *
  * Chart.js is a global (window.Chart) loaded via a <script> tag in index.html;
  * it is NOT imported as an ES module.
+ *
+ * Resize strategy (bugfix — resize-loop regression):
+ *   Chart.js with `responsive: true` already installs its own internal
+ *   ResizeObserver on the canvas element and calls chart.resize() automatically
+ *   when the canvas / container changes size. Adding a *second* ResizeObserver
+ *   that also called chart.resize() on the container created a feedback loop:
+ *   resize → chart.resize() → canvas pixel-height changes → container height
+ *   changes → observer fires again → unbounded growth (observed: ~3 M px).
+ *   Fix: rely exclusively on Chart.js's built-in responsive handling.  The
+ *   explicit ResizeObserver has been removed.  `height: 300` is passed in
+ *   commonOptions so Chart.js anchors its initial pixel height to 300 px;
+ *   combined with the CSS `.chart-container canvas { height: 300px }` rule this
+ *   gives Chart.js a stable bounding box to resize within.
  */
 
 import { safeText } from "./utils.js";
@@ -42,7 +55,7 @@ function buildColors(count) {
 }
 
 /* --------------------------------------------------------------------------
- * Module-level Chart instances, canvas contexts, and resize observer.
+ * Module-level Chart instances.
  * Only this module reads or writes these references (Req 16.2).
  * -------------------------------------------------------------------------- */
 
@@ -51,18 +64,6 @@ let expenseChart = null;
 
 /** @type {import("chart.js").Chart | null} */
 let incomeChart = null;
-
-/**
- * ResizeObserver that tells Chart.js to recalculate dimensions whenever the
- * chart containers change size (e.g., when the layout switches from single-
- * column to two-column at the ≥600px breakpoint — task 9.2, Req 12.1).
- * Chart.js sets `responsive: true` on each instance so it listens to the
- * canvas element itself, but an explicit `chart.resize()` call on the
- * container resize ensures there is no momentary blank frame during the
- * layout transition.
- * @type {ResizeObserver | null}
- */
-let resizeObserver = null;
 
 /* --------------------------------------------------------------------------
  * initCharts() — Req 6.1, 15.6
@@ -106,10 +107,23 @@ export function initCharts() {
 
   const ChartCtor = window.Chart;
 
-  /** Shared default options for both doughnut charts. */
+  /**
+   * Shared default options for both doughnut charts.
+   *
+   * responsive: true  — Chart.js installs its own internal ResizeObserver on
+   *   the canvas and resizes the chart automatically when the container changes
+   *   size.  This is the sole resize mechanism; no manual ResizeObserver is
+   *   needed (and a manual one would create a feedback loop — see module comment).
+   *
+   * maintainAspectRatio: false — lets the canvas height be controlled by CSS
+   *   (.chart-container canvas { height: 300px }) rather than computed from
+   *   the width.  The `height: 300` option below anchors Chart.js's initial
+   *   pixel height to 300 px, giving it a stable bounding box to work within.
+   */
   const commonOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    height: 300,
     plugins: {
       legend: { position: "bottom" },
       tooltip: { enabled: true },
@@ -142,29 +156,6 @@ export function initCharts() {
   expenseCanvas.hidden = true;
   incomeCanvas.hidden = true;
 
-  // Attach a ResizeObserver so Chart.js instances explicitly resize when their
-  // container changes dimensions (e.g., when the CSS grid breakpoint switches
-  // the charts section from single-column to two-column at ≥600px — task 9.2,
-  // Req 12.1). Chart.js already handles this internally via its own resize
-  // listener, but calling chart.resize() directly eliminates any momentary blank
-  // frame during the layout transition.
-  //
-  // Guard: ResizeObserver is available in all modern browsers targeted by v1
-  // (Chrome, Firefox, Edge, Safari). The feature-detect is a safety measure
-  // only; not having ResizeObserver does not break the charts, they just will
-  // not get the explicit nudge on container resize.
-  if (typeof ResizeObserver !== "undefined") {
-    resizeObserver = new ResizeObserver(() => {
-      if (expenseChart !== null) expenseChart.resize();
-      if (incomeChart !== null) incomeChart.resize();
-    });
-
-    const expenseContainer = document.getElementById("expense-chart-container");
-    const incomeContainer = document.getElementById("income-chart-container");
-    if (expenseContainer) resizeObserver.observe(expenseContainer);
-    if (incomeContainer) resizeObserver.observe(incomeContainer);
-  }
-
   // Accessible text descriptions for screen readers (Req 15.6).
   const expenseDesc = document.getElementById("expense-chart-description");
   const incomeDesc = document.getElementById("income-chart-description");
@@ -181,24 +172,15 @@ export function initCharts() {
  *
  * This is the correct tear-down step before reinitialising — the lifecycle contract
  * is always: destroyCharts() → initCharts() (new instances), never create-on-top-of-live.
- * `initCharts()` calls this at its own top so callers do not need to call it manually
+ * initCharts() calls this at its own top so callers do not need to call it manually
  * before reinitialising; it is exposed for explicit resets (e.g. test teardown or a future
  * hard-reset flow).
  *
- * Also disconnects the ResizeObserver (task 9.2) so there are no dangling observers
- * after the chart instances are gone.
- *
- * Sets module-level variables back to null after destruction so subsequent `update*`
+ * Sets module-level variables back to null after destruction so subsequent update*
  * calls correctly detect the uninitialised state.
  * @returns {void}
  */
 export function destroyCharts() {
-  // Disconnect resize observer before destroying charts so the callback does
-  // not fire on already-destroyed instances (task 9.2).
-  if (resizeObserver !== null) {
-    resizeObserver.disconnect();
-    resizeObserver = null;
-  }
   if (expenseChart !== null) {
     expenseChart.destroy();
     expenseChart = null;
@@ -277,11 +259,11 @@ function _applyChartData(
 
 /**
  * Update the expense-by-category chart from a category-total Map (Req 6.2, 6.3, 6.4, 6.5).
- * Uses `chart.update()` in-place via `_applyChartData` — NO destroy/recreate on normal updates,
+ * Uses chart.update() in-place via _applyChartData — NO destroy/recreate on normal updates,
  * so no duplicate instances are created and no memory is leaked (Req 16.2).
  *
  * If the chart has not been initialised yet (e.g. canvas was absent at boot), calls
- * `initCharts()` first. Zero-total categories are excluded from the rendered chart.
+ * initCharts() first. Zero-total categories are excluded from the rendered chart.
  * Shows the empty state when there is no data for the period (Req 6.7).
  *
  * @param {Map<string, number>} categoryTotals
@@ -311,11 +293,11 @@ export function updateExpenseChart(categoryTotals, formatMoney) {
 
 /**
  * Update the income-by-category chart from a category-total Map (Req 7.3, 7.5, 7.6).
- * Uses `chart.update()` in-place via `_applyChartData` — NO destroy/recreate on normal updates,
+ * Uses chart.update() in-place via _applyChartData — NO destroy/recreate on normal updates,
  * so no duplicate instances are created and no memory is leaked (Req 16.2).
  *
  * If the chart has not been initialised yet (e.g. canvas was absent at boot), calls
- * `initCharts()` first. Zero-total categories are excluded from the rendered chart.
+ * initCharts() first. Zero-total categories are excluded from the rendered chart.
  * Shows the empty state when there is no data for the period (Req 7.7).
  *
  * @param {Map<string, number>} categoryTotals
