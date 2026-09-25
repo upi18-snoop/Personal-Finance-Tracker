@@ -10,7 +10,7 @@
  */
 
 /**
- * SUPPORTED_CURRENCIES — single source of truth for the 14 selectable ISO 4217
+ * SUPPORTED_CURRENCIES — single source of truth for the selectable ISO 4217
  * currency codes (Req 9.1). Maps each code to its default locale and a human-
  * readable label for the Settings UI.
  *
@@ -21,20 +21,64 @@
  * @type {Record<string, { locale: string, label: string }>}
  */
 export const SUPPORTED_CURRENCIES = {
-  USD: { locale: "en-US",  label: "US Dollar"        },
-  EUR: { locale: "de-DE",  label: "Euro"              },
-  GBP: { locale: "en-GB",  label: "British Pound"     },
-  IDR: { locale: "id-ID",  label: "Indonesian Rupiah" },
-  JPY: { locale: "ja-JP",  label: "Japanese Yen"      },
-  CNY: { locale: "zh-CN",  label: "Chinese Yuan"      },
-  SGD: { locale: "en-SG",  label: "Singapore Dollar"  },
-  AUD: { locale: "en-AU",  label: "Australian Dollar" },
-  CAD: { locale: "en-CA",  label: "Canadian Dollar"   },
-  CHF: { locale: "de-CH",  label: "Swiss Franc"       },
-  MYR: { locale: "ms-MY",  label: "Malaysian Ringgit" },
-  THB: { locale: "th-TH",  label: "Thai Baht"         },
-  INR: { locale: "en-IN",  label: "Indian Rupee"      },
-  KRW: { locale: "ko-KR",  label: "South Korean Won"  },
+  // ── Non-Asian (existing, preserved) ──────────────────────────────────────
+  USD: { locale: "en-US",  label: "US Dollar"              },
+  EUR: { locale: "de-DE",  label: "Euro"                   },
+  GBP: { locale: "en-GB",  label: "British Pound"          },
+  AUD: { locale: "en-AU",  label: "Australian Dollar"      },
+  CAD: { locale: "en-CA",  label: "Canadian Dollar"        },
+  CHF: { locale: "de-CH",  label: "Swiss Franc"            },
+
+  // ── East Asia ─────────────────────────────────────────────────────────────
+  CNY: { locale: "zh-CN",  label: "Chinese Yuan"           },
+  HKD: { locale: "zh-HK",  label: "Hong Kong Dollar"       },
+  JPY: { locale: "ja-JP",  label: "Japanese Yen"           },
+  KRW: { locale: "ko-KR",  label: "South Korean Won"       },
+  MNT: { locale: "mn-MN",  label: "Mongolian Tögrög"       },
+  MOP: { locale: "zh-MO",  label: "Macanese Pataca"        },
+  TWD: { locale: "zh-TW",  label: "New Taiwan Dollar"      },
+
+  // ── Southeast Asia ────────────────────────────────────────────────────────
+  BND: { locale: "ms-BN",  label: "Brunei Dollar"          },
+  IDR: { locale: "id-ID",  label: "Indonesian Rupiah"      },
+  KHR: { locale: "km-KH",  label: "Cambodian Riel"         },
+  LAK: { locale: "lo-LA",  label: "Lao Kip"                },
+  MMK: { locale: "my-MM",  label: "Myanmar Kyat"           },
+  MYR: { locale: "ms-MY",  label: "Malaysian Ringgit"      },
+  PHP: { locale: "fil-PH", label: "Philippine Peso"        },
+  SGD: { locale: "en-SG",  label: "Singapore Dollar"       },
+  THB: { locale: "th-TH",  label: "Thai Baht"              },
+  VND: { locale: "vi-VN",  label: "Vietnamese Dong"        },
+
+  // ── South Asia ────────────────────────────────────────────────────────────
+  BDT: { locale: "bn-BD",  label: "Bangladeshi Taka"       },
+  BTN: { locale: "dz-BT",  label: "Bhutanese Ngultrum"     },
+  INR: { locale: "en-IN",  label: "Indian Rupee"           },
+  LKR: { locale: "si-LK",  label: "Sri Lankan Rupee"       },
+  MVR: { locale: "dv-MV",  label: "Maldivian Rufiyaa"      },
+  NPR: { locale: "ne-NP",  label: "Nepalese Rupee"         },
+  PKR: { locale: "ur-PK",  label: "Pakistani Rupee"        },
+
+  // ── Central Asia ──────────────────────────────────────────────────────────
+  KGS: { locale: "ky-KG",  label: "Kyrgyzstani Som"        },
+  KZT: { locale: "kk-KZ",  label: "Kazakhstani Tenge"      },
+  UZS: { locale: "uz-UZ",  label: "Uzbekistani Som"        },
+
+  // ── West Asia / Middle East ───────────────────────────────────────────────
+  AED: { locale: "ar-AE",  label: "UAE Dirham"             },
+  AMD: { locale: "hy-AM",  label: "Armenian Dram"          },
+  AZN: { locale: "az-AZ",  label: "Azerbaijani Manat"      },
+  BHD: { locale: "ar-BH",  label: "Bahraini Dinar"         },
+  GEL: { locale: "ka-GE",  label: "Georgian Lari"          },
+  ILS: { locale: "he-IL",  label: "Israeli New Shekel"     },
+  IQD: { locale: "ar-IQ",  label: "Iraqi Dinar"            },
+  IRR: { locale: "fa-IR",  label: "Iranian Rial"           },
+  JOD: { locale: "ar-JO",  label: "Jordanian Dinar"        },
+  KWD: { locale: "ar-KW",  label: "Kuwaiti Dinar"          },
+  OMR: { locale: "ar-OM",  label: "Omani Rial"             },
+  QAR: { locale: "ar-QA",  label: "Qatari Riyal"           },
+  SAR: { locale: "ar-SA",  label: "Saudi Riyal"            },
+  YER: { locale: "ar-YE",  label: "Yemeni Rial"            },
 };
 
 /**
@@ -73,8 +117,8 @@ export function formatCurrency(amount, currency = "IDR", locale) {
   const formatted = new Intl.NumberFormat(resolvedLocale, {
     style: "currency",
     currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    // Do not force fraction digits — let Intl.NumberFormat use each currency's
+    // natural decimal count (0 for IDR/JPY/KRW/VND, 2 for USD/EUR/SGD, 3 for KWD/BHD/OMR).
   }).format(safeValue);
 
   // Normalize so there is exactly one ASCII space after the leading currency
