@@ -366,11 +366,14 @@ async function wireTransactionForm() {
  * the user can initiate deletion (Req 3.3).
  * @returns {Promise<void>}
  */
-async function renderTransactionList() {
+async function renderTransactionList(preloadedTransactions = null) {
   showListLoading();
   try {
     clearDataError();
-    const all = await transactions.getTransactions(state.currentUser?.id ?? null);
+    // A1: reuse caller-supplied transactions when available; fall back to fetching.
+    const all = Array.isArray(preloadedTransactions)
+      ? preloadedTransactions
+      : await transactions.getTransactions(state.currentUser?.id ?? null);
 
     // Apply the filter scope: pure read-only view, no storage writes (Req 4.14).
     const filtered = transactions.filterTransactions(all, state.filterCriteria);
@@ -588,18 +591,18 @@ function formatMoney(amount) {
  * independent filter scope (Req 4.12 / 5.9).
  * @returns {Promise<void>}
  */
-async function renderReports() {
+async function renderReports(preloadedTransactions = null) {
   const userId = state.currentUser?.id ?? null;
 
-  // Monthly_Summary for the Selected_Month (Req 5.3-5.8). Pass the active
-  // Selected_Currency so all amounts are formatted consistently (Req 9.6, 18.7).
-  await reports.renderMonthlySummary(state.selectedMonth, state.selectedCurrency, userId);
+  // A1: derive month slice from the pre-loaded full array when supplied,
+  // avoiding a second getTransactions() call.
+  const monthlyTransactions = Array.isArray(preloadedTransactions)
+    ? preloadedTransactions.filter((tx) => tx && utils.isInMonth(tx.date, state.selectedMonth))
+    : await transactions.getTransactionsByMonth(state.selectedMonth, userId);
 
-  // Category charts for the same reporting scope (Req 6.x / 7.x).
-  const monthlyTransactions = await transactions.getTransactionsByMonth(
-    state.selectedMonth,
-    userId
-  );
+  // Monthly_Summary for the Selected_Month (Req 5.3-5.8). Pass the pre-derived
+  // month slice so renderMonthlySummary skips its own getTransactionsByMonth fetch.
+  await reports.renderMonthlySummary(state.selectedMonth, state.selectedCurrency, userId, monthlyTransactions);
 
   charts.updateExpenseChart(
     transactions.categoryTotals(monthlyTransactions, "expense"),
@@ -623,16 +626,21 @@ async function renderAll() {
   try {
     clearDataError();
 
+    // A1: fetch the full transaction set once per render cycle and reuse it
+    // across dashboard, reports, charts, and the list — avoiding 3 extra
+    // network round-trips per renderAll() call when on Supabase.
+    const allTransactions = await transactions.getTransactions(userId);
+
     // Reporting scope: dashboard totals recomputed from the single source of
     // truth (transactions.calculateTotals) so a new/removed transaction is
     // reflected immediately (Req 1.6, 1.7).
-    await dashboard.renderDashboard(state, userId);
+    await dashboard.renderDashboard(state, userId, allTransactions);
 
     // Reporting scope: Monthly_Summary + charts for the Selected_Month.
-    await renderReports();
+    await renderReports(allTransactions);
 
     // List scope: keep the Transaction_List in sync with the same change.
-    await renderTransactionList();
+    await renderTransactionList(allTransactions);
   } catch (err) {
     console.error("renderAll: failed to render", err?.name ?? 'unknown');
     showDataError("Could not load data. Please check your connection.");

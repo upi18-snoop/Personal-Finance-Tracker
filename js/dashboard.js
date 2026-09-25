@@ -173,9 +173,13 @@ function renderMoneyValue(elementId, amount, currency = "IDR") {
  * @param {string|null} [userId=null] Optional user ID for async storage routing.
  * @returns {Promise<void>}
  */
-export async function renderDashboard(state, userId = null) {
+export async function renderDashboard(state, userId = null, preloadedTransactions = null) {
   const currency = (state && state.selectedCurrency) ? state.selectedCurrency : "IDR";
-  const allTransactions = await transactions.getTransactions(userId);
+  // A1: reuse caller-supplied transactions when available to avoid a redundant
+  // network round-trip; fall back to fetching when called standalone.
+  const allTransactions = Array.isArray(preloadedTransactions)
+    ? preloadedTransactions
+    : await transactions.getTransactions(userId);
 
   // Totals from the single source of truth — dashboard never sums money itself.
   const totals = transactions.calculateTotals(allTransactions);

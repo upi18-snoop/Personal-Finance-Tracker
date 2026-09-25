@@ -127,9 +127,12 @@ function renderCategoryBreakdown(listElementId, totalsMap, currency) {
  * @param {string|null} [userId=null] Optional user ID for async storage routing.
  * @returns {Promise<void>}
  */
-export async function renderMonthlySummary(monthKey, currency = "IDR", userId = null) {
+export async function renderMonthlySummary(monthKey, currency = "IDR", userId = null, preloadedMonthSlice = null) {
   // Month slice + totals from the single source of truth (Req 5.2, 1.5).
-  const monthSlice = await transactions.getTransactionsByMonth(monthKey, userId);
+  // A1: reuse caller-supplied month slice when available; fall back to fetching.
+  const monthSlice = Array.isArray(preloadedMonthSlice)
+    ? preloadedMonthSlice
+    : await transactions.getTransactionsByMonth(monthKey, userId);
   const totals = transactions.calculateTotals(monthSlice);
 
   // Monthly income / expense / net balance, each formatted via the

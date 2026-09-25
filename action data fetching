@@ -1,0 +1,116 @@
+warning: in the working copy of 'js/app.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'js/dashboard.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'js/reports.js', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/js/app.js b/js/app.js[m
+[1mindex d1f3a3a..0b1fbab 100644[m
+[1m--- a/js/app.js[m
+[1m+++ b/js/app.js[m
+[36m@@ -366,11 +366,14 @@[m [masync function wireTransactionForm() {[m
+  * the user can initiate deletion (Req 3.3).[m
+  * @returns {Promise<void>}[m
+  */[m
+[31m-async function renderTransactionList() {[m
+[32m+[m[32masync function renderTransactionList(preloadedTransactions = null) {[m
+   showListLoading();[m
+   try {[m
+     clearDataError();[m
+[31m-    const all = await transactions.getTransactions(state.currentUser?.id ?? null);[m
+[32m+[m[32m    // A1: reuse caller-supplied transactions when available; fall back to fetching.[m
+[32m+[m[32m    const all = Array.isArray(preloadedTransactions)[m
+[32m+[m[32m      ? preloadedTransactions[m
+[32m+[m[32m      : await transactions.getTransactions(state.currentUser?.id ?? null);[m
+ [m
+     // Apply the filter scope: pure read-only view, no storage writes (Req 4.14).[m
+     const filtered = transactions.filterTransactions(all, state.filterCriteria);[m
+[36m@@ -588,18 +591,18 @@[m [mfunction formatMoney(amount) {[m
+  * independent filter scope (Req 4.12 / 5.9).[m
+  * @returns {Promise<void>}[m
+  */[m
+[31m-async function renderReports() {[m
+[32m+[m[32masync function renderReports(preloadedTransactions = null) {[m
+   const userId = state.currentUser?.id ?? null;[m
+ [m
+[31m-  // Monthly_Summary for the Selected_Month (Req 5.3-5.8). Pass the active[m
+[31m-  // Selected_Currency so all amounts are formatted consistently (Req 9.6, 18.7).[m
+[31m-  await reports.renderMonthlySummary(state.selectedMonth, state.selectedCurrency, userId);[m
+[32m+[m[32m  // A1: derive month slice from the pre-loaded full array when supplied,[m
+[32m+[m[32m  // avoiding a second getTransactions() call.[m
+[32m+[m[32m  const monthlyTransactions = Array.isArray(preloadedTransactions)[m
+[32m+[m[32m    ? preloadedTransactions.filter((tx) => tx && utils.isInMonth(tx.date, state.selectedMonth))[m
+[32m+[m[32m    : await transactions.getTransactionsByMonth(state.selectedMonth, userId);[m
+ [m
+[31m-  // Category charts for the same reporting scope (Req 6.x / 7.x).[m
+[31m-  const monthlyTransactions = await transactions.getTransactionsByMonth([m
+[31m-    state.selectedMonth,[m
+[31m-    userId[m
+[31m-  );[m
+[32m+[m[32m  // Monthly_Summary for the Selected_Month (Req 5.3-5.8). Pass the pre-derived[m
+[32m+[m[32m  // month slice so renderMonthlySummary skips its own getTransactionsByMonth fetch.[m
+[32m+[m[32m  await reports.renderMonthlySummary(state.selectedMonth, state.selectedCurrency, userId, monthlyTransactions);[m
+ [m
+   charts.updateExpenseChart([m
+     transactions.categoryTotals(monthlyTransactions, "expense"),[m
+[36m@@ -623,16 +626,21 @@[m [masync function renderAll() {[m
+   try {[m
+     clearDataError();[m
+ [m
+[32m+[m[32m    // A1: fetch the full transaction set once per render cycle and reuse it[m
+[32m+[m[32m    // across dashboard, reports, charts, and the list — avoiding 3 extra[m
+[32m+[m[32m    // network round-trips per renderAll() call when on Supabase.[m
+[32m+[m[32m    const allTransactions = await transactions.getTransactions(userId);[m
+[32m+[m
+     // Reporting scope: dashboard totals recomputed from the single source of[m
+     // truth (transactions.calculateTotals) so a new/removed transaction is[m
+     // reflected immediately (Req 1.6, 1.7).[m
+[31m-    await dashboard.renderDashboard(state, userId);[m
+[32m+[m[32m    await dashboard.renderDashboard(state, userId, allTransactions);[m
+ [m
+     // Reporting scope: Monthly_Summary + charts for the Selected_Month.[m
+[31m-    await renderReports();[m
+[32m+[m[32m    await renderReports(allTransactions);[m
+ [m
+     // List scope: keep the Transaction_List in sync with the same change.[m
+[31m-    await renderTransactionList();[m
+[32m+[m[32m    await renderTransactionList(allTransactions);[m
+   } catch (err) {[m
+     console.error("renderAll: failed to render", err?.name ?? 'unknown');[m
+     showDataError("Could not load data. Please check your connection.");[m
+[1mdiff --git a/js/dashboard.js b/js/dashboard.js[m
+[1mindex 9cd9a77..fc9a62a 100644[m
+[1m--- a/js/dashboard.js[m
+[1m+++ b/js/dashboard.js[m
+[36m@@ -173,9 +173,13 @@[m [mfunction renderMoneyValue(elementId, amount, currency = "IDR") {[m
+  * @param {string|null} [userId=null] Optional user ID for async storage routing.[m
+  * @returns {Promise<void>}[m
+  */[m
+[31m-export async function renderDashboard(state, userId = null) {[m
+[32m+[m[32mexport async function renderDashboard(state, userId = null, preloadedTransactions = null) {[m
+   const currency = (state && state.selectedCurrency) ? state.selectedCurrency : "IDR";[m
+[31m-  const allTransactions = await transactions.getTransactions(userId);[m
+[32m+[m[32m  // A1: reuse caller-supplied transactions when available to avoid a redundant[m
+[32m+[m[32m  // network round-trip; fall back to fetching when called standalone.[m
+[32m+[m[32m  const allTransactions = Array.isArray(preloadedTransactions)[m
+[32m+[m[32m    ? preloadedTransactions[m
+[32m+[m[32m    : await transactions.getTransactions(userId);[m
+ [m
+   // Totals from the single source of truth — dashboard never sums money itself.[m
+   const totals = transactions.calculateTotals(allTransactions);[m
+[1mdiff --git a/js/reports.js b/js/reports.js[m
+[1mindex a253cfb..3090845 100644[m
+[1m--- a/js/reports.js[m
+[1m+++ b/js/reports.js[m
+[36m@@ -127,9 +127,12 @@[m [mfunction renderCategoryBreakdown(listElementId, totalsMap, currency) {[m
+  * @param {string|null} [userId=null] Optional user ID for async storage routing.[m
+  * @returns {Promise<void>}[m
+  */[m
+[31m-export async function renderMonthlySummary(monthKey, currency = "IDR", userId = null) {[m
+[32m+[m[32mexport async function renderMonthlySummary(monthKey, currency = "IDR", userId = null, preloadedMonthSlice = null) {[m
+   // Month slice + totals from the single source of truth (Req 5.2, 1.5).[m
+[31m-  const monthSlice = await transactions.getTransactionsByMonth(monthKey, userId);[m
+[32m+[m[32m  // A1: reuse caller-supplied month slice when available; fall back to fetching.[m
+[32m+[m[32m  const monthSlice = Array.isArray(preloadedMonthSlice)[m
+[32m+[m[32m    ? preloadedMonthSlice[m
+[32m+[m[32m    : await transactions.getTransactionsByMonth(monthKey, userId);[m
+   const totals = transactions.calculateTotals(monthSlice);[m
+ [m
+   // Monthly income / expense / net balance, each formatted via the[m
