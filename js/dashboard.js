@@ -16,6 +16,8 @@
 import * as transactions from "./transactions.js";
 import * as categories from "./categories.js";
 import * as utils from "./utils.js";
+// formatDate is imported directly for date-display formatting (A3).
+import { formatDate } from "./utils.js";
 
 /**
  * Default category lists mirroring storage.js `defaultData()` (Req 2.3, 8.4).
@@ -301,7 +303,7 @@ export function renderTransactionRow(transaction, currency = "IDR") {
   // Date (Req 3.1).
   const date = document.createElement("span");
   date.className = "transaction-row__date";
-  utils.safeText(date, transaction ? transaction.date : "");
+  utils.safeText(date, transaction ? formatDate(transaction.date) : "");
 
   // Amount — the only visually distinct field (Req 3.2). Color via class,
   // sign via a leading +/- prefix; value formatted through the Currency_Formatter

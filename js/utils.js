@@ -130,6 +130,33 @@ export function formatCurrency(amount, currency = "IDR", locale) {
 }
 
 /**
+ * Format a stored "YYYY-MM-DD" date string for display.
+ *
+ * Uses Date.UTC to parse so the result is timezone-neutral — the displayed
+ * day always matches the stored day regardless of the user's local offset.
+ * Returns the date in "DD Mon YYYY" style (e.g. "25 Sep 2026") using
+ * Intl.DateTimeFormat with en-GB locale so the ordering is unambiguous.
+ * Falls back to the original string when the input is not a valid date.
+ *
+ * @param {string} dateStr  Stored date in "YYYY-MM-DD" format.
+ * @returns {string}
+ */
+export function formatDate(dateStr) {
+  if (typeof dateStr !== "string") return dateStr ?? "";
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+  if (!match) return dateStr;
+  const [, y, m, d] = match;
+  const utc = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  if (isNaN(utc.getTime())) return dateStr;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(utc);
+}
+
+/**
  * Generate a unique id for a transaction/category.
  * @returns {string}
  */

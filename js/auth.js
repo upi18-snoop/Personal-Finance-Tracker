@@ -379,7 +379,9 @@ export function onAuthStateChange(callback) {
  *
  * The password-reset UI (Task 15.6) is responsible for building the redirect
  * URL and may pass it as a second argument; for now a sensible default is
- * derived from `window.location.origin`.
+ * derived from the current page base URL (`window.location.href` trimmed to
+ * the last '/'). This correctly includes the sub-path on GitHub Pages project
+ * sites, unlike `window.location.origin` which only returns the bare origin.
  *
  * @param {string} email
  * @param {string} [redirectTo]  Optional override for the redirect URL.

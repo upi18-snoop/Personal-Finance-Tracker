@@ -297,6 +297,18 @@ button:hover {
   margin: 0;
 }
 
+/* A5: success state for the transaction form status element. */
+.form-success {
+  color: var(--color-income);
+  font-size: var(--font-size-sm);
+}
+
+/* A4: footer row beneath Recent Transactions showing the View all link. */
+.recent-transactions__footer {
+  margin-top: var(--space-xs);
+  text-align: right;
+}
+
 /* Auth form-level error gets slightly more visual weight */
 .auth-form .form-error {
   padding: var(--space-xs) var(--space-sm);

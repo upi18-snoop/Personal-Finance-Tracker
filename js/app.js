@@ -233,21 +233,52 @@ async function resetTransactionForm(form) {
  * @returns {Promise<{ ok: boolean }>}
  */
 async function onAddTransaction(formData, form) {
-  const result = await transactions.addTransaction(formData, state.currentUser?.id ?? null);
-
-  if (!result.ok) {
-    // Invalid input: show inline messages, create nothing, keep field values.
-    showTransactionFormErrors(form, result.errors);
-    return { ok: false };
+  // A8: disable the submit button immediately to prevent double-submission.
+  const submitBtn = document.getElementById("add-transaction-button");
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    utils.safeText(submitBtn, "Adding\u2026");
   }
 
-  // Success: clear any stale errors and reset the form to its empty defaults.
-  clearTransactionFormErrors(form);
-  await resetTransactionForm(form);
+  try {
+    const result = await transactions.addTransaction(formData, state.currentUser?.id ?? null);
 
-  // Reflect the new transaction across the reporting views and the list.
-  await renderAll();
-  return { ok: true };
+    if (!result.ok) {
+      // Invalid input: show inline messages, create nothing, keep field values.
+      showTransactionFormErrors(form, result.errors);
+      return { ok: false };
+    }
+
+    // A5: show success feedback in the form's status element.
+    // Use the existing #transaction-form-error element (role="alert") which is
+    // already styled and accessible; we add a success modifier class temporarily.
+    const statusEl = document.getElementById("transaction-form-error");
+    if (statusEl) {
+      statusEl.className = "form-success";
+      utils.safeText(statusEl, "Transaction added successfully.");
+      // Auto-clear after 3 seconds so it does not become permanent noise.
+      setTimeout(() => {
+        if (statusEl.className === "form-success") {
+          statusEl.className = "form-error";
+          utils.safeText(statusEl, "");
+        }
+      }, 3000);
+    }
+
+    // Success: clear any stale validation errors and reset the form.
+    clearTransactionFormErrors(form);
+    await resetTransactionForm(form);
+
+    // Reflect the new transaction across the reporting views and the list.
+    await renderAll();
+    return { ok: true };
+  } finally {
+    // A8: always restore the button regardless of success, error, or exception.
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      utils.safeText(submitBtn, "Add transaction");
+    }
+  }
 }
 
 /**
@@ -1314,9 +1345,12 @@ function showLoginView() {
   const loginSection = document.getElementById("login-section");
   const appMain = document.getElementById("app-main");
   const registerSection = document.getElementById("register-section");
+  const newPasswordSection = document.getElementById("new-password-section");
   if (loginSection) loginSection.hidden = false;
   if (appMain) appMain.hidden = true;
   if (registerSection) registerSection.hidden = true;
+  if (newPasswordSection) newPasswordSection.hidden = true;
+  resetLoginForm();
 }
 
 /**
@@ -1547,7 +1581,13 @@ function onLoginSubmit(event) {
     const result = await auth.signIn(values.email, values.password);
 
     if (result.ok) {
-      // Login succeeded - onAuthStateChange handles the rest.
+      // Login succeeded — onAuthStateChange handles showing the dashboard.
+      // Reset the button now so it is never left in loading state if the login
+      // section becomes visible again (e.g. after subsequent logout).
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        utils.safeText(submitBtn, "Sign in");
+      }
       return;
     }
 
@@ -2026,10 +2066,10 @@ function clearFinanceUIDOM() {
   if (txList) txList.replaceChildren();
 
   // Dashboard balance / summary numbers.
-  const totalBalance = document.getElementById("total-balance");
-  const totalIncome = document.getElementById("total-income");
-  const totalExpense = document.getElementById("total-expense");
-  const txCount = document.getElementById("transaction-count");
+  const totalBalance = document.getElementById("total-balance-value");
+  const totalIncome = document.getElementById("total-income-value");
+  const totalExpense = document.getElementById("total-expense-value");
+  const txCount = document.getElementById("transaction-count-value");
   if (totalBalance) utils.safeText(totalBalance, "");
   if (totalIncome)  utils.safeText(totalIncome, "");
   if (totalExpense) utils.safeText(totalExpense, "");
@@ -2127,6 +2167,15 @@ async function initializeFinanceApplication() {
 
   // Delegated delete handling for the Transaction_List (task 3.5, Req 3.3).
   wireTransactionListDeletion();
+
+  // A4: wire the View all transactions button in the Recent Transactions section.
+  const viewAllBtn = document.getElementById("view-all-transactions-button");
+  if (viewAllBtn) {
+    viewAllBtn.addEventListener("click", () => {
+      const listSection = document.getElementById("transaction-list-section");
+      if (listSection) listSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   // Month selector: default to the current month and re-render reports/charts
   // on change - reporting scope only, never the list (task 5.2, Req 5.1/5.9).
@@ -2697,6 +2746,7 @@ async function bootstrap() {
     await initializeFinanceApplication();
   } else {
     showSignedOutState();
+    showLoginView();
     // hideProtectedApp() already called above; auth UI is already available.
   }
 

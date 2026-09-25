@@ -51,6 +51,7 @@ const SUPABASE_CDN_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+
  * @type {import('@supabase/supabase-js').SupabaseClient | null}
  */
 let _client = null;
+let _clientPromise = null; // guards against concurrent calls before _client is assigned
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -94,15 +95,25 @@ export async function getSupabaseClient() {
     return null;
   }
 
-  try {
-    const { createClient } = await import(SUPABASE_CDN_URL);
-    _client = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
-    return _client;
-  } catch (_err) {
+  // Concurrent-call guard: if a creation is already in flight, await the same
+  // Promise so createClient() is called exactly once even when multiple callers
+  // hit getSupabaseClient() before the first one completes.
+  if (_clientPromise !== null) return _clientPromise;
+
+  _clientPromise = (async () => {
+    try {
+      const { createClient } = await import(SUPABASE_CDN_URL);
+      _client = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+      return _client;
+    } catch (_err) {
     // CDN load failure (offline, CSP block, etc.)
     // SAFE: static message only — does NOT interpolate the error object,
     // SUPABASE_CONFIG.url, or SUPABASE_CONFIG.anonKey. (Req 27.4)
     console.error('supabase.js: failed to load supabase-js from CDN. Check your network connection.');
-    return null;
-  }
+      _clientPromise = null; // reset so callers can retry after CDN failure
+      return null;
+    }
+  })();
+
+  return _clientPromise;
 }
