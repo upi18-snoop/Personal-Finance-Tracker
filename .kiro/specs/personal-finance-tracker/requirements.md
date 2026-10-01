@@ -552,6 +552,6 @@ and allow the user to retry when the network is restored.
 | 1-18        | Original v1 Finance Tracker        | Phase 1-14  | Implemented    |
 | 19          | Authentication                     | Phase 15    | Implemented    |
 | 20          | User Identity & Data Isolation     | Phase 16    | Implemented    |
-| 21          | Local Data Migration (placeholder) | Phase 17    | Not implemented |
+| 21          | Local Data Migration (placeholder) | Phase 17    | Superseded by Req 23 |
 | 22          | Authentication Privacy & Security  | Phase 15-18 | Implemented    |
-| 23          | Local Data Migration (detailed)    | Phase 17    | Not implemented |
+| 23          | Local Data Migration (detailed)    | Phase 17    | Implemented    |
