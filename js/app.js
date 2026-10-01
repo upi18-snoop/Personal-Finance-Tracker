@@ -2170,11 +2170,17 @@ async function initializeFinanceApplication() {
   const userId = state.currentUser?.id ?? null;
 
   // Ensure a valid persisted schema exists before any read/write (Req 10.4).
-  await storage.initializeData(userId);
+  const appData = await storage.initializeData(userId);
 
-  // Seed the active currency from the persisted setting (Req 18.5). Must happen
-  // before renderAll so the first paint already shows the correct currency symbol.
-  state.selectedCurrency = await storage.getCurrency(userId);
+  // Seed the active currency from the AppData already returned by initializeData
+  // (Req 18.5). On the Supabase path, initializeData already fetched settings
+  // inside its internal Promise.all, so reusing that value avoids a second
+  // getSettings() round-trip. Falls back to storage.getCurrency() only if the
+  // returned AppData contains no usable currency (e.g. LocalStorage first-run).
+  const _initCurrency = appData?.settings?.currency;
+  state.selectedCurrency = (typeof _initCurrency === 'string' && _initCurrency.trim())
+    ? _initCurrency
+    : await storage.getCurrency(userId);
 
   await wireTransactionForm();
 
