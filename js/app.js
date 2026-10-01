@@ -421,19 +421,34 @@ const ALL_CATEGORIES_VALUE = "";
 
 /**
  * Resolve the merged category list (defaults + custom) for populating the
- * filter category <select>. Reads from dashboard.categoriesForType for each
- * type (which already handles the fallback to defaults while categories.js is
- * still a stub), then deduplicates across types so the combined filter list
- * shows each category name once.
+ * filter category <select>. Calls storage.loadData() ONCE and extracts both
+ * income and expense categories from the single returned AppData, then
+ * deduplicates across types so the combined list shows each name once.
+ *
+ * Round 5E: previously called dashboard.categoriesForType() twice, causing
+ * two full storage.loadData() round-trips per invocation. One load is enough
+ * because AppData already contains both category lists.
+ *
  * @returns {Promise<string[]>}
  */
 async function allCategoryOptions() {
-  // Gather all categories across both types and deduplicate.
   const userId = state.currentUser?.id ?? null;
-  const [incomeCategories, expenseCategories] = await Promise.all([
-    dashboard.categoriesForType("income", userId),
-    dashboard.categoriesForType("expense", userId),
-  ]);
+
+  // One loadData() call — AppData already contains both income and expense
+  // category arrays (defaults merged with custom).
+  const data = await storage.loadData(userId);
+
+  // Extract each type's list; fall back to the canonical frozen defaults
+  // from categories.js when the stored array is absent or empty — same
+  // fallback behaviour as categories.getCategories().
+  const incomeCategories = (data.categories && Array.isArray(data.categories.income) && data.categories.income.length > 0)
+    ? data.categories.income
+    : [...categories.DEFAULT_INCOME_CATEGORIES];
+  const expenseCategories = (data.categories && Array.isArray(data.categories.expense) && data.categories.expense.length > 0)
+    ? data.categories.expense
+    : [...categories.DEFAULT_EXPENSE_CATEGORIES];
+
+  // Deduplication — same logic as before.
   const seen = new Set();
   const result = [];
   for (const name of [...incomeCategories, ...expenseCategories]) {
