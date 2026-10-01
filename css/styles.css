@@ -1680,6 +1680,7 @@ body {
   font-weight: var(--font-weight-bold);
   font-variant-numeric: tabular-nums;
   margin: 0;
+  overflow-wrap: break-word;   /* prevent long currency values overflowing narrow cards */
 }
 
 /* ==========================================================================
@@ -1687,6 +1688,7 @@ body {
    ========================================================================== */
 
 .transaction-list-scroll {
+  padding: var(--space-xs);        /* breathing room between rows and border */
   max-height: 24rem;       /* mobile default — Req 11.3 */
   overflow-y: auto;
   overflow-x: hidden;      /* no horizontal scroll — Req 11.4 */
@@ -1732,4 +1734,9 @@ body {
 
 #card-total-expense .balance-card__value {
   color: var(--color-expense);
+}
+
+/* Transaction count card: match visual weight of the other overview cards */
+#card-transaction-count .balance-card__value {
+  font-size: var(--font-size-xl);
 }

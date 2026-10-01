@@ -230,6 +230,25 @@ export function isBlank(str) {
 }
 
 /**
+ * Return today's date as "YYYY-MM-DD" using local calendar components.
+ *
+ * Uses getFullYear / getMonth / getDate instead of toISOString()
+ * so the result always matches the user's local calendar date regardless
+ * of UTC offset.
+ *
+ * This is the canonical source for "today's local date string" in the app.
+ *
+ * @returns {string} e.g. "2025-07-15"
+ */
+export function localDateKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Safely set a node's text. Uses textContent, never innerHTML (Req 15 / security).
  * @param {HTMLElement} node
  * @param {string} value

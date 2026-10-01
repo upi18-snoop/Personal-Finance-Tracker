@@ -17,7 +17,7 @@ import * as transactions from "./transactions.js";
 import * as categories from "./categories.js";
 import * as utils from "./utils.js";
 // formatDate is imported directly for date-display formatting (A3).
-import { formatDate } from "./utils.js";
+import { formatDate, localDateKey } from "./utils.js";
 
 /**
  * Default category lists mirroring storage.js `defaultData()` (Req 2.3, 8.4).
@@ -376,11 +376,7 @@ export function renderTransactionListRows(transactionList, emptyMessage, currenc
  * @returns {string}
  */
 function todayLocalKey() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return localDateKey();
 }
 
 /**

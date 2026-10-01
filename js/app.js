@@ -23,7 +23,7 @@ import * as charts from "./charts.js";
 import * as utils from "./utils.js";
 import * as auth from "./auth.js";
 import * as migration from "./migration.js";
-const { getMonthKey } = utils;
+const { getMonthKey, localDateKey } = utils;
 
 /**
  * Current month as a "YYYY-MM" key (reporting scope default, Req 5.1).
@@ -34,7 +34,7 @@ const { getMonthKey } = utils;
  * @returns {string}
  */
 function currentMonthKey() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateKey();
   return getMonthKey(today) || today.slice(0, 7);
 }
 
@@ -207,7 +207,7 @@ async function resetTransactionForm(form) {
   const dateEl = form.querySelector("#transaction-date");
 
   if (dateEl) {
-    dateEl.value = new Date().toISOString().slice(0, 10);
+    dateEl.value = localDateKey();
   }
   if (categoryEl) {
     await dashboard.renderCategoryOptions(
@@ -314,7 +314,7 @@ async function wireTransactionForm() {
     );
   }
   if (dateEl && !dateEl.value) {
-    dateEl.value = new Date().toISOString().slice(0, 10);
+    dateEl.value = localDateKey();
   }
 
   // Changing Transaction_Type updates the applicable Category options (Req 2.3).
