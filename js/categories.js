@@ -114,7 +114,7 @@ import * as utils from "./utils.js";
  * will always include them. We keep a local reference here so categories.js can
  * answer "is this a default?" without parsing the schema.
  */
-const DEFAULT_EXPENSE_CATEGORIES = [
+export const DEFAULT_EXPENSE_CATEGORIES = Object.freeze([
   "Food",
   "Transport",
   "Fun",
@@ -122,16 +122,16 @@ const DEFAULT_EXPENSE_CATEGORIES = [
   "Shopping",
   "Health",
   "Other",
-];
+]);
 
-const DEFAULT_INCOME_CATEGORIES = [
+export const DEFAULT_INCOME_CATEGORIES = Object.freeze([
   "Salary",
   "Freelance",
   "Business",
   "Investment",
   "Gift",
   "Other",
-];
+]);
 
 /**
  * The map from type to its default list. Kept separate so lookups are O(1)

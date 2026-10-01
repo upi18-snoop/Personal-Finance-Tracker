@@ -873,12 +873,10 @@ function wireCurrencySelector() {
  * Used only to decide whether a listed category is a default (and should show
  * the read-only badge instead of a delete button).
  */
-const _DEFAULT_EXPENSE_NAMES = new Set([
-  "Food", "Transport", "Fun", "Bills", "Shopping", "Health", "Other",
-]);
-const _DEFAULT_INCOME_NAMES = new Set([
-  "Salary", "Freelance", "Business", "Investment", "Gift", "Other",
-]);
+// Default category Sets derived from the canonical definitions in categories.js
+// (the single source of truth for default category names).
+const _DEFAULT_EXPENSE_NAMES = new Set(categories.DEFAULT_EXPENSE_CATEGORIES);
+const _DEFAULT_INCOME_NAMES  = new Set(categories.DEFAULT_INCOME_CATEGORIES);
 
 /**
  * True if name is one of the built-in default categories for type.
