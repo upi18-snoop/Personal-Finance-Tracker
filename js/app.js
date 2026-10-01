@@ -544,8 +544,14 @@ async function wireFilterControls() {
   const monthEl = document.getElementById("filter-month");
 
   if (searchEl) {
-    // Use "input" so the list updates on every keystroke (live search, Req 4.9).
-    searchEl.addEventListener("input", () => void onFilterChange());
+    // Debounce the search input: wait 300 ms after the last keystroke before
+    // calling onFilterChange(). This prevents one Supabase fetch per keystroke
+    // while still giving live-search feel (Req 4.9).
+    let _searchDebounceTimer = null;
+    searchEl.addEventListener("input", () => {
+      clearTimeout(_searchDebounceTimer);
+      _searchDebounceTimer = setTimeout(() => void onFilterChange(), 300);
+    });
   }
   if (typeEl) {
     typeEl.addEventListener("change", () => void onFilterChange());
