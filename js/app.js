@@ -76,7 +76,7 @@ const state = {
  * @returns {void}
  */
 function showListLoading() {
-  const submitBtn = document.getElementById("transaction-submit-button");
+  const submitBtn = document.getElementById("add-transaction-button");
   if (submitBtn) submitBtn.disabled = true;
 
   let indicator = document.getElementById("list-loading-indicator");
@@ -99,7 +99,7 @@ function showListLoading() {
  * @returns {void}
  */
 function hideListLoading() {
-  const submitBtn = document.getElementById("transaction-submit-button");
+  const submitBtn = document.getElementById("add-transaction-button");
   if (submitBtn) submitBtn.disabled = false;
 
   const indicator = document.getElementById("list-loading-indicator");
