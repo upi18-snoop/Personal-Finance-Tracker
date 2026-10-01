@@ -397,10 +397,6 @@ button:hover {
   color: var(--color-text-muted);
 }
 
-.category-breakdown {
-  margin-top: var(--space-md);
-}
-
 .category-breakdown__heading,
 .chart-container__heading {
   font-size: var(--font-size-base);
@@ -473,12 +469,6 @@ button:hover {
    so the margin-top on siblings is reset inside that context. */
 .chart-container + .chart-container {
   margin-top: var(--space-lg);
-}
-
-.chart-description {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-  margin-top: var(--space-xs);
 }
 
 .empty-state {
