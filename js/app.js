@@ -635,6 +635,7 @@ async function renderAll() {
     // truth (transactions.calculateTotals) so a new/removed transaction is
     // reflected immediately (Req 1.6, 1.7).
     await dashboard.renderDashboard(state, userId, allTransactions);
+    dashboard.renderDailySummary(allTransactions, state.selectedCurrency);
 
     // Reporting scope: Monthly_Summary + charts for the Selected_Month.
     await renderReports(allTransactions);

@@ -360,7 +360,7 @@ Presentational redesign of the Personal Finance Tracker. All business logic, sto
 
 ### Phase 8: JavaScript — `dashboard.js` Daily Summary Implementation
 
-- [-] 8. Add `todayLocalKey()` and `renderDailySummary()` to `js/dashboard.js`
+- [x] 8. Add `todayLocalKey()` and `renderDailySummary()` to `js/dashboard.js`
   - [x] 8.1 Add `todayLocalKey()` private helper function
     - **Objective**: Implement a function that returns the current local calendar date as `"YYYY-MM-DD"` using local year/month/day components (NOT `toISOString()` which is UTC-based).
     - **File**: `js/dashboard.js`
@@ -449,7 +449,7 @@ Presentational redesign of the Personal Finance Tracker. All business logic, sto
     - **Dependencies**: 8.1, 2.1 (DOM elements must exist).
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.9, 17.1_
 
-  - [ ] 8.3 Add `"daily-summary-section"` to `DATA_SECTION_IDS` array in `dashboard.js`
+  - [x] 8.3 Add `"daily-summary-section"` to `DATA_SECTION_IDS` array in `dashboard.js`
     - **Objective**: Include the Daily Summary section in the set of data-dependent sections that `renderGlobalEmptyState()` shows/hides based on transaction count.
     - **File**: `js/dashboard.js`
     - **Steps**:
@@ -486,8 +486,8 @@ Presentational redesign of the Personal Finance Tracker. All business logic, sto
 
 ### Phase 9: JavaScript — `app.js` `renderAll()` Integration
 
-- [ ] 9. Wire `renderDailySummary` into `renderAll()` in `js/app.js`
-  - [ ] 9.1 Add synchronous call to `dashboard.renderDailySummary()` inside `renderAll()`
+- [x] 9. Wire `renderDailySummary` into `renderAll()` in `js/app.js`
+  - [x] 9.1 Add synchronous call to `dashboard.renderDailySummary()` inside `renderAll()`
     - **Objective**: Call `renderDailySummary` with the already-fetched `allTransactions` and the active currency, after `renderDashboard` completes, preserving the single-fetch optimization.
     - **File**: `js/app.js`
     - **Steps**:
@@ -527,8 +527,8 @@ Presentational redesign of the Personal Finance Tracker. All business logic, sto
 
 ### Phase 10: Verification
 
-- [ ] 10. Final integration verification — confirm all changes work together correctly
-  - [ ] 10.1 Verify HTML section order and IDs
+- [x] 10. Final integration verification — confirm all changes work together correctly
+  - [x] 10.1 Verify HTML section order and IDs
     - **Objective**: Confirm `index.html` sections are in the correct final order and all required IDs are present.
     - **File**: `index.html`
     - **Steps**:
@@ -565,7 +565,7 @@ Presentational redesign of the Personal Finance Tracker. All business logic, sto
     - **Dependencies**: 1.1, 1.2, 1.3, 1.4, 2.1, 3.1.
     - _Requirements: 14.1, 14.2, 14.3, 17.6, 17.7, 17.8_
 
-  - [ ] 10.2 Verify scroll wrapper structure
+  - [x] 10.2 Verify scroll wrapper structure
     - **Objective**: Confirm `#transaction-list` and `#transaction-list-empty` are inside `.transaction-list-scroll`, and `#filter-controls` is outside.
     - **Steps**:
       1. In `index.html`, confirm the structure of `#transaction-list-section` is:
@@ -581,7 +581,7 @@ Presentational redesign of the Personal Finance Tracker. All business logic, sto
     - **Dependencies**: 3.1.
     - _Requirements: 11.1, 11.2, 16.6_
 
-  - [ ] 10.3 Verify CSS tokens and new component classes
+  - [x] 10.3 Verify CSS tokens and new component classes
     - **Objective**: Confirm all new CSS tokens resolve and all new component classes are defined.
     - **Steps**:
       1. Confirm `:root` contains: `--color-background`, `--color-surface-raised`, `--space-1` through `--space-10`, `--font-size-xs`, `--font-size-md`, `--radius-lg`, `--shadow-card-hover`.
@@ -592,7 +592,7 @@ Presentational redesign of the Personal Finance Tracker. All business logic, sto
     - **Dependencies**: 4.1, 5.1, 5.2, 5.3, 6.1, 6.2, 7.1.
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 4.6_
 
-  - [ ] 10.4 Verify `dashboard.js` additions
+  - [x] 10.4 Verify `dashboard.js` additions
     - **Objective**: Confirm `todayLocalKey`, `renderDailySummary`, and the updated `DATA_SECTION_IDS` are correct.
     - **Steps**:
       1. Confirm `todayLocalKey` is defined (as a private function, not exported) and uses `getFullYear()`/`getMonth()`/`getDate()` — not `toISOString()`.
@@ -604,7 +604,7 @@ Presentational redesign of the Personal Finance Tracker. All business logic, sto
     - **Dependencies**: 8.1, 8.2, 8.3.
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.9, 17.1_
 
-  - [ ] 10.5 Verify `app.js` addition
+  - [x] 10.5 Verify `app.js` addition
     - **Objective**: Confirm `renderAll()` calls `renderDailySummary` exactly once, synchronously, with the pre-loaded array.
     - **Steps**:
       1. Locate `renderAll()` in `app.js`.
@@ -615,7 +615,7 @@ Presentational redesign of the Personal Finance Tracker. All business logic, sto
     - **Dependencies**: 9.1.
     - _Requirements: 8.4, 17.1, 17.2_
 
-  - [ ] 10.6 Checkpoint — open in browser and confirm baseline functionality
+  - [x] 10.6 Checkpoint — open in browser and confirm baseline functionality
     - **Objective**: Open the application using the existing local development server and confirm the app loads correctly. Do not introduce a new server, build step, or dependency.
     - **Steps**:
       1. Open the application using the existing local development server in a modern browser.

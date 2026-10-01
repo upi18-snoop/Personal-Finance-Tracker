@@ -223,6 +223,11 @@
         "executionId": "e0f76fad-c313-488d-868e-24727a369eb6",
         "chatSessionId": "sess_86f9c8e8-0748-4676-94de-2d882b17a813",
         "timestamp": 1790825035044
+      },
+      {
+        "executionId": "186bd4fc-b4fe-485a-b10c-12bd872f687e",
+        "chatSessionId": "sess_86f9c8e8-0748-4676-94de-2d882b17a813",
+        "timestamp": 1790826059626
       }
     ],
     "8.2 Add `renderDailySummary()` exported function": [
@@ -235,6 +240,116 @@
         "executionId": "e0f76fad-c313-488d-868e-24727a369eb6",
         "chatSessionId": "sess_86f9c8e8-0748-4676-94de-2d882b17a813",
         "timestamp": 1790825096615
+      }
+    ],
+    "8.3 Add `\"daily-summary-section\"` to `DATA_SECTION_IDS` array in `dashboard.js`": [
+      {
+        "executionId": "186bd4fc-b4fe-485a-b10c-12bd872f687e",
+        "chatSessionId": "sess_86f9c8e8-0748-4676-94de-2d882b17a813",
+        "timestamp": 1790826020349
+      },
+      {
+        "executionId": "186bd4fc-b4fe-485a-b10c-12bd872f687e",
+        "chatSessionId": "sess_86f9c8e8-0748-4676-94de-2d882b17a813",
+        "timestamp": 1790826059479
+      }
+    ],
+    "9.1 Add synchronous call to `dashboard.renderDailySummary()` inside `renderAll()`": [
+      {
+        "executionId": "75b92687-7912-4125-aba0-074bd421b54c",
+        "chatSessionId": "sess_b458f4c4-6ccf-47cd-b2f2-ded014425a28",
+        "timestamp": 1790826097109
+      },
+      {
+        "executionId": "75b92687-7912-4125-aba0-074bd421b54c",
+        "chatSessionId": "sess_b458f4c4-6ccf-47cd-b2f2-ded014425a28",
+        "timestamp": 1790826134471
+      }
+    ],
+    "9. Wire `renderDailySummary` into `renderAll()` in `js/app.js`": [
+      {
+        "executionId": "75b92687-7912-4125-aba0-074bd421b54c",
+        "chatSessionId": "sess_b458f4c4-6ccf-47cd-b2f2-ded014425a28",
+        "timestamp": 1790826134628
+      }
+    ],
+    "10.1 Verify HTML section order and IDs": [
+      {
+        "executionId": "62e096b3-349b-405b-b81b-c21d31e0f003",
+        "chatSessionId": "sess_7e9a124d-8701-4632-88f2-f5da051b0584",
+        "timestamp": 1790826198024
+      },
+      {
+        "executionId": "62e096b3-349b-405b-b81b-c21d31e0f003",
+        "chatSessionId": "sess_7e9a124d-8701-4632-88f2-f5da051b0584",
+        "timestamp": 1790826298349
+      }
+    ],
+    "10.2 Verify scroll wrapper structure": [
+      {
+        "executionId": "1fa9f192-0008-48a0-9070-942c671133e1",
+        "chatSessionId": "sess_82056d05-a998-4bea-b408-c09dcc9c7c51",
+        "timestamp": 1790826347374
+      },
+      {
+        "executionId": "1fa9f192-0008-48a0-9070-942c671133e1",
+        "chatSessionId": "sess_82056d05-a998-4bea-b408-c09dcc9c7c51",
+        "timestamp": 1790826371558
+      }
+    ],
+    "10.3 Verify CSS tokens and new component classes": [
+      {
+        "executionId": "19104748-4f3d-414d-b520-f8cee3f2e5db",
+        "chatSessionId": "sess_c1e4bd23-91c2-4185-a0a9-59a849f37f59",
+        "timestamp": 1790826408409
+      },
+      {
+        "executionId": "19104748-4f3d-414d-b520-f8cee3f2e5db",
+        "chatSessionId": "sess_c1e4bd23-91c2-4185-a0a9-59a849f37f59",
+        "timestamp": 1790826461479
+      }
+    ],
+    "10.4 Verify `dashboard.js` additions": [
+      {
+        "executionId": "10f7d2a0-efba-4f4b-89ef-dd6f5d374d7a",
+        "chatSessionId": "sess_0859bbd6-37bb-4da8-a253-64759e6c06fe",
+        "timestamp": 1790826511503
+      },
+      {
+        "executionId": "10f7d2a0-efba-4f4b-89ef-dd6f5d374d7a",
+        "chatSessionId": "sess_0859bbd6-37bb-4da8-a253-64759e6c06fe",
+        "timestamp": 1790826852857
+      }
+    ],
+    "10.5 Verify `app.js` addition": [
+      {
+        "executionId": "69e858c1-90b4-4799-8e2a-25e7601284eb",
+        "chatSessionId": "sess_db468fb6-9143-481f-a7ad-9492cc6cf9bb",
+        "timestamp": 1790826950092
+      },
+      {
+        "executionId": "69e858c1-90b4-4799-8e2a-25e7601284eb",
+        "chatSessionId": "sess_db468fb6-9143-481f-a7ad-9492cc6cf9bb",
+        "timestamp": 1790826975866
+      }
+    ],
+    "10.6 Checkpoint — open in browser and confirm baseline functionality": [
+      {
+        "executionId": "8d8a0bb9-49ab-490d-9357-c8a78b083945",
+        "chatSessionId": "sess_b2026c2b-4b48-46f1-9f23-f7af7c650256",
+        "timestamp": 1790827135750
+      },
+      {
+        "executionId": "8d8a0bb9-49ab-490d-9357-c8a78b083945",
+        "chatSessionId": "sess_b2026c2b-4b48-46f1-9f23-f7af7c650256",
+        "timestamp": 1790827366494
+      }
+    ],
+    "10. Final integration verification — confirm all changes work together correctly": [
+      {
+        "executionId": "8d8a0bb9-49ab-490d-9357-c8a78b083945",
+        "chatSessionId": "sess_b2026c2b-4b48-46f1-9f23-f7af7c650256",
+        "timestamp": 1790827366655
       }
     ]
   }

@@ -101,6 +101,7 @@ export async function renderCategoryOptions(selectEl, type, userId = null) {
 const DATA_SECTION_IDS = [
   "balance-section",
   "recent-transactions-section",
+  "daily-summary-section",
   "monthly-summary-section",
   "charts-section",
   "transaction-list-section",
