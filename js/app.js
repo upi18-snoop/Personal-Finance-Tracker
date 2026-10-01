@@ -375,16 +375,26 @@ async function renderTransactionList(preloadedTransactions = null) {
       ? preloadedTransactions
       : await transactions.getTransactions(state.currentUser?.id ?? null);
 
-    // Apply the filter scope: pure read-only view, no storage writes (Req 4.14).
-    const filtered = transactions.filterTransactions(all, state.filterCriteria);
+    // R5G: Scope the list to the currently selected month before applying
+    // search/type/category filters.  This is a pure in-memory slice of the
+    // already-loaded array — no additional network call is made.
+    const monthTx = all.filter(
+      (tx) => tx && utils.isInMonth(tx.date, state.selectedMonth)
+    );
 
-    // Determine the correct empty-state message (Req 4.13):
-    //   - Transactions exist but none match -> Filtered_Empty_State message.
-    //   - No transactions at all -> generic no-data message (dashboard.js default).
+    // Apply the filter scope: pure read-only view, no storage writes (Req 4.14).
+    const filtered = transactions.filterTransactions(monthTx, state.filterCriteria);
+
+    // Determine the correct empty-state message:
+    //   - No transactions in this month at all -> month-specific message.
+    //   - Transactions exist in this month but filters match nothing -> filter message.
+    //   - (No transactions at all is handled by the global empty state.)
     const emptyMessage =
-      all.length > 0 && filtered.length === 0
-        ? "No transactions match your filters."
-        : undefined;
+      monthTx.length === 0
+        ? "No transactions for this month."
+        : monthTx.length > 0 && filtered.length === 0
+          ? "No transactions match your filters."
+          : undefined;
 
     dashboard.renderTransactionListRows(filtered, emptyMessage, state.selectedCurrency);
     addDeleteControls();
@@ -789,12 +799,16 @@ function wireTransactionListDeletion() {
 async function onSelectedMonthChange(month) {
   state.selectedMonth = utils.isBlank(month) ? currentMonthKey() : month;
 
-  // Reporting scope only: Monthly_Summary + charts recomputed for the new month.
+  // Reporting scope: Monthly_Summary + charts recomputed for the new month.
   await renderReports();
 
-  // Keep the Dashboard's Selected_Month label in sync (Req 1.2). This updates
-  // the label/reporting cards without re-rendering the Transaction_List.
+  // Keep the Dashboard's Selected_Month label in sync (Req 1.2).
   await dashboard.renderDashboard(state, state.currentUser?.id ?? null);
+
+  // R5G: Transaction List must also follow the new selected month.
+  // Called without a preloaded array (standalone path) — same behaviour as
+  // other standalone list refresh calls (onFilterChange, onClearFilters).
+  await renderTransactionList();
 }
 
 /**
