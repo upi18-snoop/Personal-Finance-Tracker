@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -222,15 +222,26 @@
       </div>
     </section>
 
-    <!-- Recent transactions (Dashboard): most recent transactions, newestâ†’oldest -->
-    <section class="section recent-transactions-section" id="recent-transactions-section" aria-labelledby="recent-transactions-heading" hidden>
-      <h2 class="section-heading" id="recent-transactions-heading">Recent Transactions</h2>
-      <ul class="transaction-list recent-transactions-list" id="recent-transactions-list"></ul>
-      <p class="empty-state" id="recent-transactions-empty" hidden></p>
-      <p class="recent-transactions__footer">
-        <button type="button" id="view-all-transactions-button" class="btn-link">View all transactions &#8594;</button>
-      </p>
+    <!-- Charts: expense-by-category and income-by-category canvases -->
+    <section class="section charts-section" id="charts-section" aria-labelledby="charts-heading" hidden>
+      <h2 class="section-heading" id="charts-heading">Charts</h2>
+      <!-- chart-row: single column on mobile; 2-column side-by-side on ≥600px (task 9.2) -->
+      <div class="chart-row">
+        <div class="chart-container" id="expense-chart-container">
+          <h3 class="chart-container__heading">Expenses by category</h3>
+          <canvas id="expense-chart" role="img" aria-label="Expenses by category chart" aria-describedby="expense-chart-description"></canvas>
+          <p class="chart-description" id="expense-chart-description" data-role="expense-chart-description"></p>
+          <p class="empty-state" id="expense-chart-empty" hidden></p>
+        </div>
+        <div class="chart-container" id="income-chart-container">
+          <h3 class="chart-container__heading">Income by category</h3>
+          <canvas id="income-chart" role="img" aria-label="Income by category chart" aria-describedby="income-chart-description"></canvas>
+          <p class="chart-description" id="income-chart-description" data-role="income-chart-description"></p>
+          <p class="empty-state" id="income-chart-empty" hidden></p>
+        </div>
+      </div>
     </section>
+
 
     <!-- Add transaction form: type, item name, amount, category, date -->
     <section class="section add-transaction-section" id="add-transaction-section" aria-labelledby="add-transaction-heading">
@@ -272,6 +283,39 @@
       </form>
     </section>
 
+    <!-- Recent transactions (Dashboard): most recent transactions, newestâ†’oldest -->
+    <section class="section recent-transactions-section" id="recent-transactions-section" aria-labelledby="recent-transactions-heading" hidden>
+      <h2 class="section-heading" id="recent-transactions-heading">Recent Transactions</h2>
+      <ul class="transaction-list recent-transactions-list" id="recent-transactions-list"></ul>
+      <p class="empty-state" id="recent-transactions-empty" hidden></p>
+      <p class="recent-transactions__footer">
+        <button type="button" id="view-all-transactions-button" class="btn-link">View all transactions &#8594;</button>
+      </p>
+    </section>
+
+    <!-- Daily summary: today's income, expense, net balance (Req 8) -->
+    <section class="section daily-summary-section" id="daily-summary-section"
+             aria-labelledby="daily-summary-heading">
+      <h2 class="section-heading" id="daily-summary-heading">Today</h2>
+      <p class="daily-summary__date" id="daily-summary-date"></p>
+      <div class="daily-summary-cards">
+        <article class="daily-summary-card daily-summary-card--income">
+          <h3 class="daily-summary-card__label">Income Today</h3>
+          <p class="daily-summary-card__value u-text-income"
+             id="daily-income-value"></p>
+        </article>
+        <article class="daily-summary-card daily-summary-card--expense">
+          <h3 class="daily-summary-card__label">Expense Today</h3>
+          <p class="daily-summary-card__value u-text-expense"
+             id="daily-expense-value"></p>
+        </article>
+        <article class="daily-summary-card">
+          <h3 class="daily-summary-card__label">Net Today</h3>
+          <p class="daily-summary-card__value" id="daily-net-value"></p>
+        </article>
+      </div>
+    </section>
+
     <!-- Monthly selector: Selected_Month (reporting scope) -->
     <section class="section month-selector-section" id="month-selector-section" aria-labelledby="month-selector-heading">
       <h2 class="section-heading" id="month-selector-heading">Selected Month</h2>
@@ -298,26 +342,6 @@
       <div class="category-breakdown" id="income-category-breakdown" aria-label="Income by category">
         <h3 class="category-breakdown__heading">Income by category</h3>
         <ul class="category-breakdown__list" id="income-category-list"></ul>
-      </div>
-    </section>
-
-    <!-- Charts: expense-by-category and income-by-category canvases -->
-    <section class="section charts-section" id="charts-section" aria-labelledby="charts-heading" hidden>
-      <h2 class="section-heading" id="charts-heading">Charts</h2>
-      <!-- chart-row: single column on mobile; 2-column side-by-side on â‰¥600px (task 9.2) -->
-      <div class="chart-row">
-        <div class="chart-container" id="expense-chart-container">
-          <h3 class="chart-container__heading">Expenses by category</h3>
-          <canvas id="expense-chart" role="img" aria-label="Expenses by category chart" aria-describedby="expense-chart-description"></canvas>
-          <p class="chart-description" id="expense-chart-description" data-role="expense-chart-description"></p>
-          <p class="empty-state" id="expense-chart-empty" hidden></p>
-        </div>
-        <div class="chart-container" id="income-chart-container">
-          <h3 class="chart-container__heading">Income by category</h3>
-          <canvas id="income-chart" role="img" aria-label="Income by category chart" aria-describedby="income-chart-description"></canvas>
-          <p class="chart-description" id="income-chart-description" data-role="income-chart-description"></p>
-          <p class="empty-state" id="income-chart-empty" hidden></p>
-        </div>
       </div>
     </section>
 
@@ -349,8 +373,11 @@
           <button type="button" id="clear-filters-button" class="btn-secondary">Clear filters</button>
         </div>
       </form>
-      <ul class="transaction-list" id="transaction-list"></ul>
-      <p class="empty-state" id="transaction-list-empty" hidden></p>
+      <div class="transaction-list-scroll" tabindex="0"
+           aria-label="Transaction list, scrollable">
+        <ul class="transaction-list" id="transaction-list"></ul>
+        <p class="empty-state" id="transaction-list-empty" hidden></p>
+      </div>
     </section>
 
     <!-- Category management -->

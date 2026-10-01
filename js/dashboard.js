@@ -367,3 +367,56 @@ export function renderTransactionListRows(transactionList, emptyMessage, currenc
     }
   }
 }
+
+/**
+ * Compute today's local calendar date as "YYYY-MM-DD" using local
+ * year/month/day components — never toISOString() which is UTC-based
+ * and may return the previous day in timezones east of UTC (Req 8.2).
+ * @returns {string}
+ */
+function todayLocalKey() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Render the Daily Summary section with today's income, expense, and net
+ * balance. Reads from the already-fetched allTransactions array; performs
+ * no I/O of any kind (Req 8.3, 8.4, 17.1).
+ *
+ * @param {object[]} transactionList  Full in-memory transaction array.
+ * @param {string}   [currency="IDR"] Active Selected_Currency.
+ * @returns {void}
+ */
+export function renderDailySummary(transactionList, currency = "IDR") {
+  const list = Array.isArray(transactionList) ? transactionList : [];
+  const cur  = (currency && currency.trim()) ? currency : "IDR";
+  const todayKey = todayLocalKey();
+
+  // Filter to today's transactions only — strict string equality (Req 8.3).
+  const todayTxs = list.filter(tx => tx && tx.date === todayKey);
+
+  let income  = 0;
+  let expense = 0;
+  for (const tx of todayTxs) {
+    const amt = Number(tx.amount) || 0;
+    if (tx.type === "income")  income  += amt;
+    if (tx.type === "expense") expense += amt;
+  }
+  const net = income - expense;
+
+  // DOM writes — all via safeText + formatCurrency (Req 8.1).
+  // Each write is null-guarded: missing element is silently skipped.
+  const incomeEl  = document.getElementById("daily-income-value");
+  const expenseEl = document.getElementById("daily-expense-value");
+  const netEl     = document.getElementById("daily-net-value");
+  const dateEl    = document.getElementById("daily-summary-date");
+
+  if (incomeEl)  utils.safeText(incomeEl,  utils.formatCurrency(income,  cur));
+  if (expenseEl) utils.safeText(expenseEl, utils.formatCurrency(expense, cur));
+  if (netEl)     utils.safeText(netEl,     utils.formatCurrency(net,     cur));
+  if (dateEl)    utils.safeText(dateEl,    utils.formatDate(todayKey));
+}

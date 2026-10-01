@@ -1,0 +1,241 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Move `#charts-section` from position 7 to position 3 (after `#balance-section`)": [
+      {
+        "executionId": "51fded5f-57ab-44a5-a067-b704c1f9a7ef",
+        "chatSessionId": "sess_9e2e56aa-3d4f-48a8-95e9-8c3bddf6558e",
+        "timestamp": 1790821371930
+      },
+      {
+        "executionId": "51fded5f-57ab-44a5-a067-b704c1f9a7ef",
+        "chatSessionId": "sess_9e2e56aa-3d4f-48a8-95e9-8c3bddf6558e",
+        "timestamp": 1790821797707
+      }
+    ],
+    "1.2 Move `#recent-transactions-section` from position 3 to position 5 (after `#add-transaction-section`)": [
+      {
+        "executionId": "456c87e7-ae11-42f8-982e-7944f9bb053d",
+        "chatSessionId": "sess_b3aecca5-fcbb-49aa-93d9-798f215412ab",
+        "timestamp": 1790821821681
+      },
+      {
+        "executionId": "456c87e7-ae11-42f8-982e-7944f9bb053d",
+        "chatSessionId": "sess_b3aecca5-fcbb-49aa-93d9-798f215412ab",
+        "timestamp": 1790821938652
+      }
+    ],
+    "1.3 Move `#month-selector-section` from position 5 to position 7 (after the new `#daily-summary-section` placeholder position)": [
+      {
+        "executionId": "d3d0df36-b28a-4b7c-bcb6-51ee80132e5f",
+        "chatSessionId": "sess_d7bdedf9-9060-4bb6-88ea-b477057c7404",
+        "timestamp": 1790821963308
+      },
+      {
+        "executionId": "d3d0df36-b28a-4b7c-bcb6-51ee80132e5f",
+        "chatSessionId": "sess_d7bdedf9-9060-4bb6-88ea-b477057c7404",
+        "timestamp": 1790822004099
+      }
+    ],
+    "1.4 Move `#monthly-summary-section` from position 6 to position 8 (after `#month-selector-section`)": [
+      {
+        "executionId": "7a7d8287-f9cb-492a-b4c3-3b37c7cf836e",
+        "chatSessionId": "sess_8aace834-7b55-44b1-81d0-1e4512d5c38f",
+        "timestamp": 1790822042135
+      },
+      {
+        "executionId": "7a7d8287-f9cb-492a-b4c3-3b37c7cf836e",
+        "chatSessionId": "sess_8aace834-7b55-44b1-81d0-1e4512d5c38f",
+        "timestamp": 1790822068460
+      }
+    ],
+    "1. Reorder existing `<section>` elements inside `<main id=\"app-main\">` to match the required order": [
+      {
+        "executionId": "7a7d8287-f9cb-492a-b4c3-3b37c7cf836e",
+        "chatSessionId": "sess_8aace834-7b55-44b1-81d0-1e4512d5c38f",
+        "timestamp": 1790822068559
+      }
+    ],
+    "2.1 Insert `#daily-summary-section` at position 6 (between `#recent-transactions-section` and `#month-selector-section`)": [
+      {
+        "executionId": "63118f61-d24b-403a-92b8-11144b28a13d",
+        "chatSessionId": "sess_4bd43e80-c835-4828-8ffb-bd524750a29b",
+        "timestamp": 1790822152830
+      },
+      {
+        "executionId": "63118f61-d24b-403a-92b8-11144b28a13d",
+        "chatSessionId": "sess_4bd43e80-c835-4828-8ffb-bd524750a29b",
+        "timestamp": 1790822197473
+      }
+    ],
+    "2. Insert the new Daily Summary section into `index.html`": [
+      {
+        "executionId": "63118f61-d24b-403a-92b8-11144b28a13d",
+        "chatSessionId": "sess_4bd43e80-c835-4828-8ffb-bd524750a29b",
+        "timestamp": 1790822197623
+      }
+    ],
+    "3.1 Add `.transaction-list-scroll` div wrapper around `#transaction-list` and `#transaction-list-empty`": [
+      {
+        "executionId": "68e3c47c-0e61-4aac-ae82-4db4e8752771",
+        "chatSessionId": "sess_0a9d631d-392b-4e10-900e-62610ea3184d",
+        "timestamp": 1790822485405
+      },
+      {
+        "executionId": "68e3c47c-0e61-4aac-ae82-4db4e8752771",
+        "chatSessionId": "sess_0a9d631d-392b-4e10-900e-62610ea3184d",
+        "timestamp": 1790823836447
+      }
+    ],
+    "3. Wrap `#transaction-list` and `#transaction-list-empty` in an internal scroll container inside `#transaction-list-section`": [
+      {
+        "executionId": "68e3c47c-0e61-4aac-ae82-4db4e8752771",
+        "chatSessionId": "sess_0a9d631d-392b-4e10-900e-62610ea3184d",
+        "timestamp": 1790823836687
+      }
+    ],
+    "4.1 Append new design tokens to the existing `:root` declaration": [
+      {
+        "executionId": "771b1acf-4443-4785-ae2a-7686a49237ef",
+        "chatSessionId": "sess_f96071bb-4175-4dc6-8b99-cc2d4dee4353",
+        "timestamp": 1790823912115
+      },
+      {
+        "executionId": "771b1acf-4443-4785-ae2a-7686a49237ef",
+        "chatSessionId": "sess_f96071bb-4175-4dc6-8b99-cc2d4dee4353",
+        "timestamp": 1790823953758
+      }
+    ],
+    "4. Extend the `:root` block in `css/styles.css` with new CSS custom properties": [
+      {
+        "executionId": "771b1acf-4443-4785-ae2a-7686a49237ef",
+        "chatSessionId": "sess_f96071bb-4175-4dc6-8b99-cc2d4dee4353",
+        "timestamp": 1790823953896
+      }
+    ],
+    "5.1 Add `.daily-summary__date` style": [
+      {
+        "executionId": "fe29d54b-3640-4ace-b477-baa4394f709a",
+        "chatSessionId": "sess_8973d6a4-5228-44d2-9f99-ea6db8367c79",
+        "timestamp": 1790824006520
+      },
+      {
+        "executionId": "fe29d54b-3640-4ace-b477-baa4394f709a",
+        "chatSessionId": "sess_8973d6a4-5228-44d2-9f99-ea6db8367c79",
+        "timestamp": 1790824075273
+      }
+    ],
+    "5.2 Add `.daily-summary-cards` layout and `.daily-summary-card` base styles": [
+      {
+        "executionId": "655d963e-ec80-439e-8d5c-732a23066c0e",
+        "chatSessionId": "sess_d76f3a62-99dc-47e8-8122-2ab9ce018963",
+        "timestamp": 1790824107059
+      },
+      {
+        "executionId": "655d963e-ec80-439e-8d5c-732a23066c0e",
+        "chatSessionId": "sess_d76f3a62-99dc-47e8-8122-2ab9ce018963",
+        "timestamp": 1790824143216
+      }
+    ],
+    "5.3 Add responsive breakpoint for Daily Summary cards (≥600px row layout)": [
+      {
+        "executionId": "785ab0f7-b0ee-4220-b408-92529db2f33d",
+        "chatSessionId": "sess_d44e54e0-02c7-4b37-a652-c5b558711ee4",
+        "timestamp": 1790824160390
+      },
+      {
+        "executionId": "785ab0f7-b0ee-4220-b408-92529db2f33d",
+        "chatSessionId": "sess_d44e54e0-02c7-4b37-a652-c5b558711ee4",
+        "timestamp": 1790824499717
+      }
+    ],
+    "5. Add Daily Summary component CSS to `css/styles.css`": [
+      {
+        "executionId": "785ab0f7-b0ee-4220-b408-92529db2f33d",
+        "chatSessionId": "sess_d44e54e0-02c7-4b37-a652-c5b558711ee4",
+        "timestamp": 1790824499835
+      }
+    ],
+    "6.1 Add base scroll container styles": [
+      {
+        "executionId": "30c21297-15f3-4640-bde0-363b53699219",
+        "chatSessionId": "sess_daca220d-0b73-45f3-a758-d32a25cee932",
+        "timestamp": 1790824653346
+      },
+      {
+        "executionId": "30c21297-15f3-4640-bde0-363b53699219",
+        "chatSessionId": "sess_daca220d-0b73-45f3-a758-d32a25cee932",
+        "timestamp": 1790824695145
+      }
+    ],
+    "6.2 Add ≥600px max-height override for scroll container": [
+      {
+        "executionId": "95612bd8-63ae-43cd-9809-f4cecb8a4a58",
+        "chatSessionId": "sess_450d121b-1a80-41f9-8c05-563362eb345a",
+        "timestamp": 1790824723987
+      },
+      {
+        "executionId": "95612bd8-63ae-43cd-9809-f4cecb8a4a58",
+        "chatSessionId": "sess_450d121b-1a80-41f9-8c05-563362eb345a",
+        "timestamp": 1790824765397
+      }
+    ],
+    "6. Add `.transaction-list-scroll` CSS to `css/styles.css`": [
+      {
+        "executionId": "95612bd8-63ae-43cd-9809-f4cecb8a4a58",
+        "chatSessionId": "sess_450d121b-1a80-41f9-8c05-563362eb345a",
+        "timestamp": 1790824765518
+      }
+    ],
+    "7.1 Increase Total Balance value font size and add income/expense colors": [
+      {
+        "executionId": "b9dbb5c2-81de-4c11-8e9b-f89a16b5bc0f",
+        "chatSessionId": "sess_2526e2dd-97bc-4f8c-b24d-10b663fed39c",
+        "timestamp": 1790824818013
+      },
+      {
+        "executionId": "b9dbb5c2-81de-4c11-8e9b-f89a16b5bc0f",
+        "chatSessionId": "sess_2526e2dd-97bc-4f8c-b24d-10b663fed39c",
+        "timestamp": 1790824884247
+      }
+    ],
+    "7. Add ID-scoped CSS rules to visually enhance the Overview balance cards": [
+      {
+        "executionId": "b9dbb5c2-81de-4c11-8e9b-f89a16b5bc0f",
+        "chatSessionId": "sess_2526e2dd-97bc-4f8c-b24d-10b663fed39c",
+        "timestamp": 1790824884432
+      }
+    ],
+    "8.1 Add `todayLocalKey()` private helper function": [
+      {
+        "executionId": "7afc4aa1-b7bc-4d98-ba7a-3ce2142b4268",
+        "chatSessionId": "sess_525c8df5-766f-44e4-946b-a439e196a5c4",
+        "timestamp": 1790824933521
+      },
+      {
+        "executionId": "7afc4aa1-b7bc-4d98-ba7a-3ce2142b4268",
+        "chatSessionId": "sess_525c8df5-766f-44e4-946b-a439e196a5c4",
+        "timestamp": 1790824996636
+      }
+    ],
+    "8. Add `todayLocalKey()` and `renderDailySummary()` to `js/dashboard.js`": [
+      {
+        "executionId": "e0f76fad-c313-488d-868e-24727a369eb6",
+        "chatSessionId": "sess_86f9c8e8-0748-4676-94de-2d882b17a813",
+        "timestamp": 1790825035044
+      }
+    ],
+    "8.2 Add `renderDailySummary()` exported function": [
+      {
+        "executionId": "e0f76fad-c313-488d-868e-24727a369eb6",
+        "chatSessionId": "sess_86f9c8e8-0748-4676-94de-2d882b17a813",
+        "timestamp": 1790825038914
+      },
+      {
+        "executionId": "e0f76fad-c313-488d-868e-24727a369eb6",
+        "chatSessionId": "sess_86f9c8e8-0748-4676-94de-2d882b17a813",
+        "timestamp": 1790825096615
+      }
+    ]
+  }
+}
