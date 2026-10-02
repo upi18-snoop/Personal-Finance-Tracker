@@ -932,9 +932,13 @@ body {
 }
 
 /* Inside .chart-row the individual chart-container margin-top is redundant;
-   the flex/grid gap handles spacing. Reset it here to avoid double-spacing. */
+   the flex/grid gap handles spacing. Reset it here to avoid double-spacing.
+   Also remove the standalone max-width / margin-inline centering so both
+   containers fill their grid column equally for a consistent visual height. */
 .chart-row .chart-container {
   margin-top: 0;
+  max-width: none;
+  margin-inline: 0;
 }
 
 /* --------------------------------------------------------------------------
@@ -968,7 +972,7 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--space-md);
-    align-items: start;
+    align-items: stretch;
   }
 
   .transaction-form .form-actions,
@@ -1003,7 +1007,7 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--space-lg);
-    align-items: start;
+    align-items: stretch;
     margin-top: var(--space-md);
   }
 

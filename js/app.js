@@ -61,7 +61,7 @@ const isRecoveryRedirect = (
 
 const state = {
   selectedMonth: currentMonthKey(),
-  filterCriteria: { searchTerm: "", type: "all", category: "", month: "" },
+  filterCriteria: { searchTerm: "", type: "all", category: "", month: currentMonthKey() },
   selectedCurrency: "IDR", // overwritten in initializeFinanceApplication() from storage.getCurrency()
   currentUser: null,
 };
@@ -375,28 +375,40 @@ async function renderTransactionList(preloadedTransactions = null) {
       ? preloadedTransactions
       : await transactions.getTransactions(state.currentUser?.id ?? null);
 
-    // R5G: Scope the list to the currently selected month before applying
-    // search/type/category filters.  This is a pure in-memory slice of the
-    // already-loaded array — no additional network call is made.
-    const monthTx = all.filter(
-      (tx) => tx && utils.isInMonth(tx.date, state.selectedMonth)
-    );
-
     // Apply the filter scope: pure read-only view, no storage writes (Req 4.14).
-    const filtered = transactions.filterTransactions(monthTx, state.filterCriteria);
+    // NOTE: state.selectedMonth does NOT restrict the Transaction List —
+    // use the #filter-month control (filterCriteria.month) to scope by month.
+    const filtered = transactions.filterTransactions(all, state.filterCriteria);
 
-    // Determine the correct empty-state message:
-    //   - No transactions in this month at all -> month-specific message.
-    //   - Transactions exist in this month but filters match nothing -> filter message.
-    //   - (No transactions at all is handled by the global empty state.)
+    // Sort filtered results newest→oldest by date, then by createdAt as a
+    // stable tie-breaker when two transactions share the same date.
+    const sorted = filtered.slice().sort((a, b) => {
+      const dateA = (a && a.date) ? a.date : "";
+      const dateB = (b && b.date) ? b.date : "";
+      if (dateA > dateB) return -1;
+      if (dateA < dateB) return  1;
+      // Same date: use createdAt descending as a stable secondary key.
+      const tsA = (a && a.createdAt) ? a.createdAt : "";
+      const tsB = (b && b.createdAt) ? b.createdAt : "";
+      return tsB > tsA ? 1 : tsB < tsA ? -1 : 0;
+    });
+
+    // Determine the correct empty-state message (Req 4.13):
+    //   - Month filter active and no transactions in that month -> month-specific message.
+    //   - Transactions exist but filters match nothing -> Filtered_Empty_State message.
+    //   - No transactions at all -> generic no-data message (dashboard.js default).
+    const activeMonth = state.filterCriteria.month;
+    const monthCount = activeMonth
+      ? all.filter((tx) => tx && utils.isInMonth(tx.date, activeMonth)).length
+      : all.length;
     const emptyMessage =
-      monthTx.length === 0
+      activeMonth && monthCount === 0
         ? "No transactions for this month."
-        : monthTx.length > 0 && filtered.length === 0
+        : all.length > 0 && filtered.length === 0
           ? "No transactions match your filters."
           : undefined;
 
-    dashboard.renderTransactionListRows(filtered, emptyMessage, state.selectedCurrency);
+    dashboard.renderTransactionListRows(sorted, emptyMessage, state.selectedCurrency);
     addDeleteControls();
   } catch (err) {
     console.error("renderTransactionList: failed to load transactions", err?.name ?? 'unknown');
@@ -535,7 +547,7 @@ async function onFilterChange() {
  */
 async function onClearFilters() {
   // Reset the shared filter state to defaults (Req 4.10).
-  state.filterCriteria = { searchTerm: "", type: "all", category: "", month: "" };
+  state.filterCriteria = { searchTerm: "", type: "all", category: "", month: currentMonthKey() };
 
   // Reset the filter controls so the UI matches the cleared state.
   const searchEl = document.getElementById("filter-search");
@@ -546,7 +558,7 @@ async function onClearFilters() {
   if (searchEl) searchEl.value = "";
   if (typeEl) typeEl.value = "all";
   if (categoryEl) categoryEl.value = ALL_CATEGORIES_VALUE;
-  if (monthEl) monthEl.value = "";
+  if (monthEl) monthEl.value = currentMonthKey();
 
   // List scope only: show all stored transactions (Req 4.11).
   await renderTransactionList();
@@ -585,6 +597,9 @@ async function wireFilterControls() {
     categoryEl.addEventListener("change", () => void onFilterChange());
   }
   if (monthEl) {
+    // Seed the Transaction Month control to the current default month so
+    // the UI matches filterCriteria.month (which defaults to currentMonthKey()).
+    monthEl.value = state.filterCriteria.month;
     monthEl.addEventListener("change", () => void onFilterChange());
   }
 
@@ -799,16 +814,12 @@ function wireTransactionListDeletion() {
 async function onSelectedMonthChange(month) {
   state.selectedMonth = utils.isBlank(month) ? currentMonthKey() : month;
 
-  // Reporting scope: Monthly_Summary + charts recomputed for the new month.
+  // Reporting scope only: Monthly_Summary + charts recomputed for the new month.
+  // The Transaction List is independent — it is NOT scoped to selectedMonth.
   await renderReports();
 
   // Keep the Dashboard's Selected_Month label in sync (Req 1.2).
   await dashboard.renderDashboard(state, state.currentUser?.id ?? null);
-
-  // R5G: Transaction List must also follow the new selected month.
-  // Called without a preloaded array (standalone path) — same behaviour as
-  // other standalone list refresh calls (onFilterChange, onClearFilters).
-  await renderTransactionList();
 }
 
 /**
