@@ -1734,3 +1734,374 @@ body {
 #card-transaction-count .balance-card__value {
   font-size: var(--font-size-xl);
 }
+
+/* ====================================================================
+   TRANSACTIONS SECTION — consolidated, single authoritative definition
+   (Round 11: replaces previous Round 9B + Round 10 duplicate blocks)
+   ==================================================================== */
+
+/* ── Section container ─────────────────────────────────────────────── */
+.transaction-list-section {
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-xl) var(--space-lg);
+}
+
+/* ── Section header: heading+subtitle left, Transaction Month right ─── */
+.tx-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.tx-section-heading-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.tx-section-heading {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-heading);
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  margin: 0 0 4px;
+}
+
+.tx-section-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+  font-weight: var(--font-weight-normal);
+}
+
+/* Transaction Month control — top-right */
+.tx-section-month {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tx-month-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tx-month-input {
+  min-height: 36px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.tx-month-input:focus {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px rgba(67,97,238,0.12);
+}
+
+/* ── Filter toolbar: Search + Type + Category + Reset ───────────────
+   Visual container: background panel, border, radius, padding.
+   Mobile-first flex; tablet row; desktop proportional widths.
+   ─────────────────────────────────────────────────────────────────── */
+.filter-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+/* Shared: inputs and selects inside the filter bar */
+.filter-controls input[type="search"],
+.filter-controls select {
+  min-height: var(--control-min-height, 40px);
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.filter-controls input[type="search"] {
+  flex: 3 1 200px;
+  min-width: 0;
+}
+
+.filter-controls select {
+  flex: 1 1 110px;
+  min-width: 90px;
+}
+
+.filter-controls input[type="search"]:focus,
+.filter-controls select:focus {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px rgba(67,97,238,0.12);
+}
+
+/* Reset Filters button */
+.btn-filter-reset {
+  flex-shrink: 0;
+  min-height: var(--control-min-height, 40px);
+  padding: 0 var(--space-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-filter-reset:hover {
+  background: var(--color-surface);
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
+}
+.btn-filter-reset:focus-visible {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px rgba(67,97,238,0.12);
+}
+
+/* ── Transaction toolbar: count LEFT, exports RIGHT ─────────────────── */
+.tx-list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-wrap: wrap;
+}
+
+.tx-list-context {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+/* Export actions — right side of toolbar */
+.tx-export-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.btn-export {
+  min-height: 30px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-export:hover {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  border-color: var(--color-primary);
+}
+
+#export-status-message {
+  width: 100%;
+  margin-top: var(--space-xs);
+  font-size: var(--font-size-xs);
+}
+
+/* ── Scroll container ────────────────────────────────────────────────── */
+.transaction-list-scroll {
+  max-height: 22rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+.transaction-list-scroll::-webkit-scrollbar { width: 4px; }
+.transaction-list-scroll::-webkit-scrollbar-track { background: transparent; }
+.transaction-list-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
+.transaction-list-scroll:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* ── Transaction rows ────────────────────────────────────────────────── */
+.transaction-list { display: flex; flex-direction: column; gap: 0; }
+
+.transaction-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: var(--space-lg);
+  row-gap: 2px;
+  padding: 0.8rem var(--space-sm);
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-left: 3px solid transparent;
+  background: var(--color-surface);
+  transition: background-color 0.1s;
+  min-width: 0;
+}
+.transaction-row:hover { background: var(--color-surface-muted); }
+.transaction-row:last-child { border-bottom: none; }
+.transaction-row--income { border-left-color: var(--color-income); }
+.transaction-row--expense { border-left-color: var(--color-expense); }
+
+.transaction-row__name {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  line-height: 1.3;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.transaction-row__amount {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+  line-height: 1.3;
+}
+
+.tx-meta {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  min-width: 0;
+}
+
+.transaction-row__category,
+.transaction-row__type,
+.transaction-row__date {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.transaction-row__type::before,
+.transaction-row__date::before {
+  content: " \00B7 ";
+  color: var(--color-border);
+}
+
+/* Delete button */
+.transaction-row__delete {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+  align-self: center;
+  background: transparent;
+  color: transparent;
+  border: 1px solid transparent;
+  font-size: 0.7rem;
+  min-height: 24px;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+  line-height: 1;
+}
+.transaction-row:hover .transaction-row__delete,
+.transaction-row__delete:focus {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+.transaction-row__delete:hover {
+  background: var(--color-expense-soft);
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+
+/* ── Responsive >= 600px ─────────────────────────────────────────────── */
+@media (min-width: 600px) {
+  .filter-controls {
+    flex-wrap: nowrap;
+  }
+  .filter-controls input[type="search"] {
+    flex: 3 1 0;
+    min-width: 0;
+  }
+  .filter-controls select {
+    flex: 1 1 0;
+    min-width: 90px;
+  }
+  .transaction-list-scroll { max-height: 28rem; }
+}
+
+/* ── Responsive >= 1024px ────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .filter-controls {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    flex-wrap: unset;
+    align-items: center;
+  }
+  .filter-controls input[type="search"] { min-width: 0; }
+  .transaction-list-scroll { max-height: 34rem; }
+}
+
+/* ── Mobile <= 599px ─────────────────────────────────────────────────── */
+@media (max-width: 599px) {
+  .transaction-list-section { padding: var(--space-md); }
+  .tx-section-header { flex-direction: column; gap: var(--space-md); }
+  .tx-section-month { width: 100%; }
+  .tx-month-input { width: 100%; }
+  .filter-controls { flex-direction: column; align-items: stretch; }
+  .filter-controls input[type="search"],
+  .filter-controls select,
+  .btn-filter-reset { width: 100%; flex: none; min-height: var(--control-min-height, 40px); }
+  .tx-list-toolbar { flex-direction: column; align-items: flex-start; gap: var(--space-xs); }
+  .tx-export-actions { width: 100%; justify-content: flex-start; }
+  .transaction-row__delete {
+    color: var(--color-text-muted) !important;
+    border-color: var(--color-border) !important;
+  }
+}

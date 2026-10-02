@@ -204,10 +204,19 @@ export async function renderDashboard(state, userId = null, preloadedTransaction
   }
 
   // Selected_Month label (Req 1.2).
+  // A5: display as "October 2026" rather than raw "2026-10".
   const monthEl = document.getElementById("selected-month-label");
   if (monthEl) {
     const selectedMonth = state && state.selectedMonth ? state.selectedMonth : "";
-    utils.safeText(monthEl, selectedMonth);
+    let friendlyMonth = selectedMonth;
+    if (/^\d{4}-\d{2}$/.test(selectedMonth)) {
+      const [y, m] = selectedMonth.split("-");
+      const d = new Date(Date.UTC(Number(y), Number(m) - 1, 1));
+      friendlyMonth = new Intl.DateTimeFormat("en-US", {
+        month: "long", year: "numeric", timeZone: "UTC"
+      }).format(d);
+    }
+    utils.safeText(monthEl, friendlyMonth);
   }
 
   // Recent transactions, newest→oldest (Req 1.4).
@@ -320,7 +329,12 @@ export function renderTransactionRow(transaction, currency = "IDR") {
   const rawAmount = transaction ? transaction.amount : 0;
   utils.safeText(amount, `${sign}${utils.formatCurrency(rawAmount, currency)}`);
 
-  row.append(name, category, type, date, amount);
+  // tx-meta: wrapper for secondary metadata (category, type, date)
+  // Added in Round 9B for clean 2-line CSS layout. Original classes unchanged.
+  const meta = document.createElement("span");
+  meta.className = "tx-meta";
+  meta.append(category, type, date);
+  row.append(name, amount, meta);
   return row;
 }
 

@@ -59,6 +59,14 @@ const isRecoveryRedirect = (
   window.location.hash.includes('type=recovery')
 );
 
+/**
+ * Last sorted+filtered transaction list used by the Transaction List renderer.
+ * Updated every time renderTransactionList() renders rows. Used by export
+ * functions so they do not need a separate Supabase fetch.
+ * @type {object[]}
+ */
+let _lastRenderedTransactions = [];
+
 const state = {
   selectedMonth: currentMonthKey(),
   filterCriteria: { searchTerm: "", type: "all", category: "", month: currentMonthKey() },
@@ -408,6 +416,22 @@ async function renderTransactionList(preloadedTransactions = null) {
           ? "No transactions match your filters."
           : undefined;
 
+﻿    _lastRenderedTransactions = sorted; // capture for export
+    // Update tx-list-context: active month + count (Round 9B)
+    const ctxEl = document.getElementById('tx-list-context');
+    if (ctxEl) {
+      const activeMonthKey = state.filterCriteria.month;
+      let ctxText = '';
+      if (activeMonthKey) {
+        const d = utils.formatDate(activeMonthKey + '-01');
+        ctxText = d.length > 7 ? d.slice(3) : d;
+        if (sorted.length > 0) {
+          ctxText += ' \xb7 ' + sorted.length + (sorted.length === 1 ? ' transaction' : ' transactions');
+        }
+      }
+      utils.safeText(ctxEl, ctxText);
+      ctxEl.hidden = !ctxText;
+    }
     dashboard.renderTransactionListRows(sorted, emptyMessage, state.selectedCurrency);
     addDeleteControls();
   } catch (err) {
@@ -2244,6 +2268,9 @@ async function initializeFinanceApplication() {
   // Wired before renderAll so the category filter is populated on first paint.
   await wireFilterControls();
 
+  // Export buttons (Round 8A).
+  wireExportButtons();
+
   // Initialise the Chart.js canvases once (task 7.1, Req 6.1, 15.6).
   charts.initCharts();
 
@@ -2756,6 +2783,162 @@ function wireMigrationUI() {
   if (failedSkipBtn) {
     failedSkipBtn.addEventListener("click", hideMigrationModal);
   }
+}
+
+/* --------------------------------------------------------------------------
+ * Export — CSV and XLSX (Round 8A)
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Format a YYYY-MM month key as "Month YYYY" for filenames and display.
+ * @param {string} monthKey  "YYYY-MM"
+ * @returns {string}  e.g. "2026-09"
+ */
+function _exportMonthKey() {
+  return state.filterCriteria.month || currentMonthKey();
+}
+
+/**
+ * Build the six-column export data array from the last rendered transaction list.
+ * Returns null and shows feedback if there are no transactions to export.
+ * @returns {{ rows: string[][], currency: string } | null}
+ */
+function _buildExportData() {
+  const txList = _lastRenderedTransactions;
+  if (!txList || txList.length === 0) {
+    const statusEl = document.getElementById("transaction-form-error") ||
+                     document.getElementById("data-load-error");
+    // Show inline message near the transaction list section
+    let msgEl = document.getElementById("export-status-message");
+    if (!msgEl) {
+      msgEl = document.createElement("p");
+      msgEl.id = "export-status-message";
+      msgEl.className = "form-error";
+      msgEl.setAttribute("role", "status");
+      const actionsEl = document.getElementById("clear-filters-button")?.closest(".tx-list-toolbar");
+      if (actionsEl) actionsEl.insertAdjacentElement("afterend", msgEl);
+    }
+    utils.safeText(msgEl, "No transactions to export.");
+    msgEl.hidden = false;
+    setTimeout(() => { if (msgEl) msgEl.hidden = true; }, 4000);
+    return null;
+  }
+  // Clear any previous status message
+  const prevMsg = document.getElementById("export-status-message");
+  if (prevMsg) prevMsg.hidden = true;
+
+  const cur = state.selectedCurrency || "IDR";
+  const rows = txList.map((tx) => [
+    tx.date     || "",
+    tx.type === "income" ? "Income" : "Expense",
+    tx.category || "",
+    tx.itemName || "",
+    tx.amount   != null ? Number(tx.amount) : 0,
+    cur,
+  ]);
+  return { rows, currency: cur };
+}
+
+/**
+ * Export filtered transactions as a UTF-8 CSV file.
+ */
+function exportCSV() {
+  const data = _buildExportData();
+  if (!data) return;
+
+  const header = ["Date", "Type", "Category", "Description", "Amount", "Currency"];
+  const csvLines = [header, ...data.rows].map((row) =>
+    row.map((cell) => {
+      const v = cell == null ? "" : String(cell);
+      // Wrap in quotes if the value contains comma, quote, or newline.
+      if (v.includes(",") || v.includes('"') || v.includes("\n") || v.includes("\r")) {
+        return '"' + v.replace(/"/g, '""|') + '"';
+      }
+      return v;
+    }).join(",")
+  ).join("\r\n");
+
+  // UTF-8 BOM ensures Excel opens the file with correct encoding.
+  const blob = new Blob(["\uFEFF" + csvLines], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "personal-finance-transactions-" + _exportMonthKey() + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+}
+
+/**
+ * Export filtered transactions as an XLSX file using SheetJS (xlsx 0.20.3).
+ * Falls back to an inline error message if the library is unavailable.
+ */
+function exportXLSX() {
+  if (typeof window === "undefined" || typeof window.XLSX === "undefined") {
+    let msgEl = document.getElementById("export-status-message");
+    if (!msgEl) {
+      msgEl = document.createElement("p");
+      msgEl.id = "export-status-message";
+      msgEl.className = "form-error";
+      msgEl.setAttribute("role", "status");
+      const actionsEl = document.getElementById("clear-filters-button")?.closest(".tx-list-toolbar");
+      if (actionsEl) actionsEl.insertAdjacentElement("afterend", msgEl);
+    }
+    utils.safeText(msgEl, "XLSX export is temporarily unavailable. Please try again.");
+    msgEl.hidden = false;
+    setTimeout(() => { if (msgEl) msgEl.hidden = true; }, 5000);
+    return;
+  }
+
+  const data = _buildExportData();
+  if (!data) return;
+
+  try {
+    const XLSX = window.XLSX;
+    const header = ["Date", "Type", "Category", "Description", "Amount", "Currency"];
+    const wsData = [header, ...data.rows];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Set reasonable column widths.
+    ws["!cols"] = [
+      { wch: 12 }, // Date
+      { wch: 10 }, // Type
+      { wch: 16 }, // Category
+      { wch: 30 }, // Description
+      { wch: 14 }, // Amount
+      { wch:  8 }, // Currency
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Transactions");
+    XLSX.writeFile(wb, "personal-finance-transactions-" + _exportMonthKey() + ".xlsx");
+  } catch (err) {
+    console.error("exportXLSX: failed", err?.message ?? "unknown");
+    let msgEl = document.getElementById("export-status-message");
+    if (!msgEl) {
+      msgEl = document.createElement("p");
+      msgEl.id = "export-status-message";
+      msgEl.className = "form-error";
+      msgEl.setAttribute("role", "status");
+      const actionsEl = document.getElementById("clear-filters-button")?.closest(".tx-list-toolbar");
+      if (actionsEl) actionsEl.insertAdjacentElement("afterend", msgEl);
+    }
+    utils.safeText(msgEl, "Unable to export XLSX. Please try again.");
+    msgEl.hidden = false;
+    setTimeout(() => { if (msgEl) msgEl.hidden = true; }, 5000);
+  }
+}
+
+/**
+ * Wire the Export CSV and Export XLSX buttons.
+ * @returns {void}
+ */
+function wireExportButtons() {
+  const csvBtn = document.getElementById("export-csv-button");
+  if (csvBtn) csvBtn.addEventListener("click", exportCSV);
+
+  const xlsxBtn = document.getElementById("export-xlsx-button");
+  if (xlsxBtn) xlsxBtn.addEventListener("click", exportXLSX);
 }
 
 /* --------------------------------------------------------------------------

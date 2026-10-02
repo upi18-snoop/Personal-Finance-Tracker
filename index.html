@@ -256,8 +256,8 @@
           <span class="field-error" id="transaction-type-error" data-field-error="type" role="alert" aria-live="polite"></span>
         </div>
         <div class="form-field">
-          <label for="transaction-item-name">Item name</label>
-          <input type="text" id="transaction-item-name" name="itemName" autocomplete="off" aria-describedby="transaction-item-name-error">
+          <label for="transaction-item-name">Description</label>
+          <input type="text" id="transaction-item-name" name="itemName" autocomplete="off" placeholder="e.g. Groceries, salary, lunch" aria-describedby="transaction-item-name-error">
           <span class="field-error" id="transaction-item-name-error" data-field-error="itemName" role="alert" aria-live="polite"></span>
         </div>
         <div class="form-field">
@@ -318,10 +318,11 @@
 
     <!-- Monthly selector: Selected_Month (reporting scope) -->
     <section class="section month-selector-section" id="month-selector-section" aria-labelledby="month-selector-heading">
-      <h2 class="section-heading" id="month-selector-heading">Selected Month</h2>
+      <h2 class="section-heading" id="month-selector-heading">Reporting Month</h2>
       <div class="form-field">
-        <label for="selected-month">Month</label>
+        <label for="selected-month">Reporting Month</label>
         <input type="month" id="selected-month" name="selectedMonth">
+        <span class="settings-form__hint">Used for your monthly summary and reports.</span>
       </div>
       <p class="selected-month-label" id="selected-month-label" data-role="selected-month"></p>
     </section>
@@ -346,33 +347,38 @@
     </section>
 
     <!-- Transaction list with filter/search controls -->
-    <section class="section transaction-list-section" id="transaction-list-section" aria-labelledby="transaction-list-heading" hidden>
-      <h2 class="section-heading" id="transaction-list-heading">Transactions</h2>
+    <section class="transaction-list-section" id="transaction-list-section" aria-labelledby="transaction-list-heading" hidden>
+      <!-- Header: title+subtitle left, Transaction Month right -->
+      <div class="tx-section-header">
+        <div class="tx-section-heading-group">
+          <h2 class="tx-section-heading" id="transaction-list-heading">Transactions</h2>
+          <p class="tx-section-subtitle">View and manage your transactions</p>
+        </div>
+        <div class="tx-section-month">
+          <label class="tx-month-label" for="filter-month">Transaction Month</label>
+          <input type="month" id="filter-month" name="month" class="tx-month-input">
+        </div>
+      </div>
+      <!-- Filter bar: search + type + category + reset -->
       <form class="filter-controls" id="filter-controls" aria-label="Filter transactions">
-        <div class="form-field">
-          <label for="filter-search">Search</label>
-          <input type="search" id="filter-search" name="searchTerm" autocomplete="off">
-        </div>
-        <div class="form-field">
-          <label for="filter-type">Type</label>
-          <select id="filter-type" name="type">
-            <option value="all">All</option>
-            <option value="income">Income</option>
-            <option value="expense">Expense</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label for="filter-category">Category</label>
-          <select id="filter-category" name="category"></select>
-        </div>
-        <div class="form-field">
-          <label for="filter-month">Month</label>
-          <input type="month" id="filter-month" name="month">
-        </div>
-        <div class="form-actions">
-          <button type="button" id="clear-filters-button" class="btn-secondary">Clear filters</button>
-        </div>
+        <input type="search" id="filter-search" name="searchTerm" autocomplete="off"
+               placeholder="Search transactions..." aria-label="Search transactions">
+        <select id="filter-type" name="type" aria-label="Filter by type">
+          <option value="all">All types</option>
+          <option value="income">Income</option>
+          <option value="expense">Expense</option>
+        </select>
+        <select id="filter-category" name="category" aria-label="Filter by category"></select>
+        <button type="button" id="clear-filters-button" class="btn-filter-reset">Reset Filters</button>
       </form>
+      <!-- Toolbar: count left, exports right -->
+      <div class="tx-list-toolbar">
+        <p class="tx-list-context" id="tx-list-context" aria-live="polite"></p>
+        <div class="tx-export-actions">
+          <button type="button" id="export-csv-button" class="btn-export">Export CSV</button>
+          <button type="button" id="export-xlsx-button" class="btn-export">Export XLSX</button>
+        </div>
+      </div>
       <div class="transaction-list-scroll" tabindex="0"
            aria-label="Transaction list, scrollable">
         <ul class="transaction-list" id="transaction-list"></ul>
@@ -528,11 +534,19 @@
     <section class="privacy-section" id="privacy-section" aria-labelledby="privacy-heading">
       <h2 class="section-heading" id="privacy-heading">Privacy</h2>
       <p class="privacy-statement" id="privacy-statement">
-        Your financial data is stored only in this browser using local storage.
-        It is never sent to any external server.
+        <strong>Without an account:</strong> Your financial data stays only in this
+        browser's local storage and is never sent anywhere.
+        <strong>When signed in:</strong> Your data is securely stored in your personal
+        Supabase cloud account and is not accessible to other users.
       </p>
     </section>
   </footer>
+  <!--
+    SheetJS (xlsx 0.20.3) — pinned version for XLSX export.
+    Loaded from the official SheetJS CDN. Only used when the user clicks
+    "Export XLSX". CSV export works without this script.
+  -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
 </body>
 </html>
 
