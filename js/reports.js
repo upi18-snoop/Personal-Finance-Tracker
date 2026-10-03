@@ -61,7 +61,7 @@ function renderMoneyLine(elementId, label, amount, currency) {
  * @param {string} currency Active Selected_Currency for formatting.
  * @returns {void}
  */
-function renderCategoryBreakdown(listElementId, totalsMap, currency) {
+function renderCategoryBreakdown(listElementId, totalsMap, currency, totalLabel = '') {
   const listEl = document.getElementById(listElementId);
   if (!listEl) return;
 
@@ -104,6 +104,22 @@ function renderCategoryBreakdown(listElementId, totalsMap, currency) {
     item.appendChild(nameSpan);
     item.appendChild(amountSpan);
     listEl.appendChild(item);
+  }
+
+  // Total row: rendered after all category rows when a label is provided.
+  if (nonzeroEntries.length > 0 && totalLabel) {
+    const grandTotal = nonzeroEntries.reduce((sum, [, v]) => sum + v, 0);
+    const totalItem = document.createElement('li');
+    totalItem.className = 'category-breakdown__item category-breakdown__item--total';
+    const totalName = document.createElement('span');
+    totalName.className = 'category-breakdown__name';
+    utils.safeText(totalName, totalLabel);
+    const totalAmount = document.createElement('span');
+    totalAmount.className = 'category-breakdown__amount';
+    utils.safeText(totalAmount, utils.formatCurrency(grandTotal, currency));
+    totalItem.appendChild(totalName);
+    totalItem.appendChild(totalAmount);
+    listEl.appendChild(totalItem);
   }
 }
 
@@ -151,6 +167,6 @@ export async function renderMonthlySummary(monthKey, currency = "IDR", userId = 
   const expenseTotals = transactions.categoryTotals(monthSlice, "expense");
   const incomeTotals = transactions.categoryTotals(monthSlice, "income");
 
-  renderCategoryBreakdown("expense-category-list", expenseTotals, currency);
-  renderCategoryBreakdown("income-category-list", incomeTotals, currency);
+  renderCategoryBreakdown("expense-category-list", expenseTotals, currency, "Total Expense");
+  renderCategoryBreakdown("income-category-list", incomeTotals, currency, "Total Income");
 }

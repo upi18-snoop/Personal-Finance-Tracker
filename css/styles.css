@@ -802,6 +802,13 @@ body {
   padding: var(--space-xs) 0;
 }
 
+.category-breakdown__item--total {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-2xs);
+  padding-top: var(--space-2xs);
+  font-weight: var(--font-weight-medium);
+}
+
 /* ==========================================================================
    Chart containers (task 7.1) — Req 6.1, 15.6
    ========================================================================== */
