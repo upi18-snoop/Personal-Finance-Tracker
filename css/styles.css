@@ -79,6 +79,14 @@
   --color-background: var(--color-bg);
   --color-surface-raised: #fafbfc;
 
+  /* Tokens used by Transactions section components — defined here so
+     all components resolve correctly at every viewport width. */
+  --color-surface-muted:   #f4f6f8;  /* hover/tint surface = --color-bg */
+  --color-border-subtle:   #e8ecf0;  /* light row separator, between bg and border */
+  --color-text-secondary:  #52606d;  /* secondary labels = --color-text-muted */
+  --font-weight-semibold:  600;      /* = --font-weight-medium */
+  --color-expense-soft:    #fdf2f2;  /* very light red for delete hover */
+
   /* Req 1.2 — spacing scale aliases */
   --space-1:  0.25rem;   /*  4px */
   --space-2:  0.5rem;    /*  8px */
@@ -401,6 +409,15 @@ button:hover {
 .chart-container__heading {
   font-size: var(--font-size-base);
   margin-bottom: var(--space-xs);
+}
+
+.chart-container__heading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  background: var(--color-surface);
 }
 
 .category-breakdown__list,
@@ -795,7 +812,7 @@ body {
    wider than the viewport on narrow screens (Req 12.3). */
 .chart-container {
   position: relative;
-  height: 300px;
+  height: 280px;
   max-width: 32rem;
   margin-inline: auto;
   overflow: hidden;
@@ -804,7 +821,7 @@ body {
 /* Give each canvas a fixed height so Chart.js has a stable bounding box.
    max-width: 100% keeps it within its container on narrow viewports. */
 .chart-container canvas {
-  height: 300px;
+  height: 220px;
   max-width: 100%;
 }
 
@@ -931,13 +948,11 @@ body {
      since the gap property handles spacing between siblings. */
 }
 
-/* Inside .chart-row the individual chart-container margin-top is redundant;
-   the flex/grid gap handles spacing. Reset it here to avoid double-spacing.
-   Also remove the standalone max-width / margin-inline centering so both
-   containers fill their grid column equally for a consistent visual height. */
+/* Inside .chart-row, reset the top margin only — the container-level
+   max-width and margin-inline handle centering. */
 .chart-row .chart-container {
   margin-top: 0;
-  max-width: none;
+  max-width: 22rem;
   margin-inline: 0;
 }
 
@@ -1226,7 +1241,7 @@ body {
   text-underline-offset: 2px;
   cursor: pointer;
   font-size: var(--font-size-sm);
-  min-height: 36px;
+  min-height: auto;
   padding: var(--space-2xs) 0;
   vertical-align: baseline;
 }
@@ -2063,6 +2078,7 @@ body {
 /* ── Responsive >= 600px ─────────────────────────────────────────────── */
 @media (min-width: 600px) {
   .filter-controls {
+    display: flex;
     flex-wrap: nowrap;
   }
   .filter-controls input[type="search"] {
@@ -2090,16 +2106,60 @@ body {
 
 /* ── Mobile <= 599px ─────────────────────────────────────────────────── */
 @media (max-width: 599px) {
+  /* Transactions card: reduce padding on small screens */
   .transaction-list-section { padding: var(--space-md); }
-  .tx-section-header { flex-direction: column; gap: var(--space-md); }
-  .tx-section-month { width: 100%; }
-  .tx-month-input { width: 100%; }
-  .filter-controls { flex-direction: column; align-items: stretch; }
+
+  /* Header: stack heading group above Transaction Month */
+  .tx-section-header {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  .tx-section-month {
+    width: 100%;
+  }
+  .tx-month-input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Filter bar: full-width stacked column */
+  .filter-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-xs);
+  }
   .filter-controls input[type="search"],
   .filter-controls select,
-  .btn-filter-reset { width: 100%; flex: none; min-height: var(--control-min-height, 40px); }
-  .tx-list-toolbar { flex-direction: column; align-items: flex-start; gap: var(--space-xs); }
-  .tx-export-actions { width: 100%; justify-content: flex-start; }
+  .btn-filter-reset {
+    width: 100%;
+    flex: none;
+    min-height: var(--control-min-height);
+    box-sizing: border-box;
+  }
+
+  /* Toolbar: stack context line above export buttons */
+  .tx-list-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
+  }
+  .tx-list-context {
+    width: 100%;
+  }
+  /* Export buttons: wrap onto two lines if needed, full-width row */
+  .tx-export-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+  }
+  .btn-export {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: center;
+  }
+
+  /* Delete button: always visible on touch (no hover state on mobile) */
   .transaction-row__delete {
     color: var(--color-text-muted) !important;
     border-color: var(--color-border) !important;

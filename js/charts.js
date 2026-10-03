@@ -53,6 +53,72 @@ const CHART_COLORS = [
 function buildColors(count) {
   return Array.from({ length: count }, (_, i) => CHART_COLORS[i % CHART_COLORS.length]);
 }
+/* --------------------------------------------------------------------------
+ * compactNumber — compact notation for center summary (no currency symbol).
+ * 1000 -> '1K', 1200 -> '1.2K', 1000000 -> '1M', 1500000 -> '1.5M', etc.
+ * Handles negatives safely. Used only by the centerText plugin.
+ * -------------------------------------------------------------------------- */
+function compactNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  const compact = (amount, suffix) => `${Number(amount.toFixed(2))}${suffix}`;
+  if (abs >= 1e9) return sign + compact(abs / 1e9, 'B');
+  if (abs >= 1e6) return sign + compact(abs / 1e6, 'M');
+  if (abs >= 1e3) return sign + compact(abs / 1e3, 'K');
+  return sign + abs;
+}
+
+/* --------------------------------------------------------------------------
+ * centerText — inline Chart.js plugin for doughnut center summary
+ *
+ * Draws a label line and a formatted total value in the doughnut hole after
+ * Chart.js renders the arcs and legend. Reads two properties set on the chart
+ * instance by _applyChartData:
+ *   chart._centerTextLabel     — short string displayed above the value
+ *   chart._centerTextFormatter — formatMoney callback (amount) → string
+ * Skips drawing when there is no data or the chart area is unavailable.
+ * -------------------------------------------------------------------------- */
+const centerText = {
+  id: 'centerText',
+  afterDraw(chart) {
+    const { ctx, chartArea, data } = chart;
+    if (!chartArea) return;
+
+    // Sum all dataset values to get the monthly total for this chart.
+    const dataset = data.datasets[0];
+    const total = Array.isArray(dataset?.data)
+      ? dataset.data.reduce((sum, v) => sum + (Number(v) || 0), 0)
+      : 0;
+    if (total <= 0) return;
+
+    const label = typeof chart._centerTextLabel === 'string'
+      ? chart._centerTextLabel : '';
+    const formatter = typeof chart._centerTextFormatter === 'function'
+      ? chart._centerTextFormatter : String;
+
+    const cx = (chartArea.left + chartArea.right) / 2;
+    const cy = (chartArea.top + chartArea.bottom) / 2;
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Label line
+    ctx.font = '11px system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = '#52606d';
+    ctx.fillText(label, cx, cy - 9);
+
+    // Value line
+    ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = '#1f2933';
+    ctx.fillText(formatter(total), cx, cy + 9);
+
+    ctx.restore();
+  },
+};
+
 
 /* --------------------------------------------------------------------------
  * Module-level Chart instances.
@@ -124,6 +190,8 @@ export function initCharts() {
     responsive: true,
     maintainAspectRatio: false,
     height: 300,
+    radius: '75%',
+    cutout: '65%',
     plugins: {
       legend: { position: "bottom" },
       tooltip: { enabled: true },
@@ -136,6 +204,7 @@ export function initCharts() {
       labels: [],
       datasets: [{ data: [], backgroundColor: [] }],
     },
+    plugins: [centerText],
     options: commonOptions,
   });
 
@@ -145,6 +214,7 @@ export function initCharts() {
       labels: [],
       datasets: [{ data: [], backgroundColor: [] }],
     },
+    plugins: [centerText],
     options: commonOptions,
   });
 
@@ -245,6 +315,13 @@ function _applyChartData(
   chart.data.labels = labels;
   chart.data.datasets[0].data = data;
   chart.data.datasets[0].backgroundColor = backgroundColor;
+
+  // Supply center-text metadata for the centerText plugin (drawn in afterDraw).
+  // _centerTextFormatter is the formatMoney callback passed from the caller;
+  // _centerTextLabel is set per-chart by updateExpenseChart / updateIncomeChart.
+  if (typeof formatMoney === 'function') {
+    chart._centerTextFormatter = compactNumber;
+  }
   chart.update();
 
   // Build an accessible text summary for screen readers (Req 15.6).
@@ -275,6 +352,7 @@ export function updateExpenseChart(categoryTotals, formatMoney) {
   if (expenseChart === null) initCharts();
   if (expenseChart === null) return; // initCharts failed (Chart.js unavailable or canvas absent)
 
+  expenseChart._centerTextLabel = 'Expenses';
   _applyChartData(
     expenseChart,
     categoryTotals instanceof Map ? categoryTotals : new Map(),
@@ -309,6 +387,7 @@ export function updateIncomeChart(categoryTotals, formatMoney) {
   if (incomeChart === null) initCharts();
   if (incomeChart === null) return; // initCharts failed (Chart.js unavailable or canvas absent)
 
+  incomeChart._centerTextLabel = 'Income';
   _applyChartData(
     incomeChart,
     categoryTotals instanceof Map ? categoryTotals : new Map(),
