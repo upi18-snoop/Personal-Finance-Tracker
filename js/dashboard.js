@@ -185,6 +185,15 @@ export async function renderDashboard(state, userId = null, preloadedTransaction
   // Totals from the single source of truth — dashboard never sums money itself.
   const totals = transactions.calculateTotals(allTransactions);
 
+  // Monthly-scoped totals for the Overview income/expense/count cards.
+  // Total Balance stays all-time; income, expense, and count reflect the
+  // currently selected month only, filtered from the same allTransactions array.
+  const selectedMonth = state && state.selectedMonth ? state.selectedMonth : "";
+  const monthSlice = selectedMonth
+    ? allTransactions.filter((tx) => tx && utils.isInMonth(tx.date, selectedMonth))
+    : allTransactions;
+  const monthlyTotals = transactions.calculateTotals(monthSlice);
+
   // Global empty state: show the Empty_State when there are no transactions and
   // hide the data-dependent sections; reveal them once transactions exist
   // (Req 11.1, 11.3). This is the authoritative call-site for this toggle so
@@ -194,13 +203,13 @@ export async function renderDashboard(state, userId = null, preloadedTransaction
   // Balance cards, every money value formatted via the Currency_Formatter with
   // the active Selected_Currency (Req 9.6).
   renderMoneyValue("total-balance-value", totals.balance, currency);
-  renderMoneyValue("total-income-value", totals.totalIncome, currency);
-  renderMoneyValue("total-expense-value", totals.totalExpense, currency);
+  renderMoneyValue("total-income-value", monthlyTotals.totalIncome, currency);
+  renderMoneyValue("total-expense-value", monthlyTotals.totalExpense, currency);
 
   // Transaction count is a plain integer, not a monetary value.
   const countEl = document.getElementById("transaction-count-value");
   if (countEl) {
-    utils.safeText(countEl, String(totals.count));
+    utils.safeText(countEl, String(monthlyTotals.count));
   }
 
   // Selected_Month label (Req 1.2).
