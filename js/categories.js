@@ -115,7 +115,7 @@ import * as utils from "./utils.js";
  * answer "is this a default?" without parsing the schema.
  */
 export const DEFAULT_EXPENSE_CATEGORIES = Object.freeze([
-  "Food",
+  "Food & Beverage",
   "Transport",
   "Fun",
   "Bills",
@@ -255,6 +255,13 @@ export async function validateCategory(name, type, userId = null) {
   }
 
   const trimmed = name.trim();
+
+  // Reject retired default category names that have been renamed to
+  // prevent users from recreating the old name as a custom category.
+  const RETIRED_EXPENSE_NAMES = { "food": "Food & Beverage" };
+  if (type === "expense" && Object.prototype.hasOwnProperty.call(RETIRED_EXPENSE_NAMES, trimmed.toLowerCase())) {
+    return { ok: false, error: "duplicate" };
+  }
   const existing = await getCategories(type, userId);
 
   // Case-sensitive duplicate check (category names are stored as-is).

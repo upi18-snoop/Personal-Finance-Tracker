@@ -35,7 +35,7 @@ export const SCHEMA_VERSION = 1;
  * Order is intentional and user-facing.
  */
 const DEFAULT_EXPENSE_CATEGORIES = [
-  "Food",
+  "Food & Beverage",
   "Transport",
   "Fun",
   "Bills",
@@ -220,8 +220,57 @@ function readRaw() {
  * @param {object} data AppData (mutated in place and returned)
  * @returns {{ data: object, changed: boolean }}
  */
+/**
+ * Migrate renamed default categories in stored data.
+ *
+ * Replaces the old category name with the new one in both the categories
+ * array and all stored transactions, so existing data is backward-compatible
+ * with renamed defaults (e.g. 'Food' -> 'Food & Beverage').
+ *
+ * @param {object} data AppData object (mutated in place).
+ * @returns {boolean} true if any change was made.
+ */
+function _migrateRenamedCategories(data) {
+  let changed = false;
+  const renames = [{ from: 'Food', to: 'Food & Beverage' }];
+
+  for (const { from, to } of renames) {
+    const fromLower = from.toLowerCase();
+    const toLower = to.toLowerCase();
+
+    // Migrate category arrays: remove old name (case-insensitive), add new if missing.
+    if (Array.isArray(data.categories?.expense)) {
+      for (let i = data.categories.expense.length - 1; i >= 0; i--) {
+        if (data.categories.expense[i] && data.categories.expense[i].toLowerCase() === fromLower) {
+          data.categories.expense.splice(i, 1);
+          changed = true;
+        }
+      }
+      if (!data.categories.expense.some((n) => n && n.toLowerCase() === toLower)) {
+        data.categories.expense.unshift(to);
+        changed = true;
+      }
+    }
+
+    // Migrate transaction category names (case-insensitive match).
+    if (Array.isArray(data.transactions)) {
+      for (const tx of data.transactions) {
+        if (tx && tx.type === 'expense' && tx.category && tx.category.toLowerCase() === fromLower) {
+          tx.category = to;
+          changed = true;
+        }
+      }
+    }
+  }
+
+  return changed;
+}
+
 function ensureDefaultCategories(data) {
   let changed = false;
+
+  // Migrate renamed default categories before seeding.
+  if (_migrateRenamedCategories(data)) changed = true;
 
   if (!data.categories || typeof data.categories !== "object") {
     data.categories = { income: [], expense: [] };
@@ -642,11 +691,11 @@ async function _loadFromSupabase(provider, userId) {
 
   // Merge defaults with custom categories, preserving order.
   const customIncome  = customCategories.filter((c) => c.type === "income").map((c) => c.name);
-  const customExpense = customCategories.filter((c) => c.type === "expense").map((c) => c.name);
+  const customExpense = customCategories.filter((c) => c.type === 'expense' && c.name.toLowerCase() !== 'food').map((c) => c.name);
 
   return {
     version: SCHEMA_VERSION,
-    transactions: Array.isArray(transactions) ? transactions : [],
+    transactions: Array.isArray(transactions) ? transactions.map((tx) => tx && tx.type === 'expense' && tx.category === 'Food' ? { ...tx, category: 'Food & Beverage' } : tx) : [],
     categories: {
       income:  [...DEFAULT_INCOME_CATEGORIES,  ...customIncome],
       expense: [...DEFAULT_EXPENSE_CATEGORIES, ...customExpense],
